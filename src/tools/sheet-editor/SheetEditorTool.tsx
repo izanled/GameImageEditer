@@ -461,6 +461,53 @@ export default function SheetEditorTool() {
     setStaging(null)
   }
 
+  // append a blank frame sized to the current cell (falls back to 32px)
+  function addEmptyFrame() {
+    const w = Math.max(1, outLayout.cellW || 32)
+    const h = Math.max(1, outLayout.cellH || 32)
+    const canvas = createCanvas(w, h)
+    const base = createCanvas(w, h)
+    const frame: Frame = {
+      id: nextId++,
+      canvas,
+      base,
+      w,
+      h,
+      url: canvas.toDataURL('image/png'),
+      dx: 0,
+      dy: 0,
+      scale: 1,
+    }
+    setFrames((prev) => [...prev, frame])
+  }
+
+  // duplicate a frame (pixels, pristine base, and transform) right after it
+  function duplicateFrame(id: number) {
+    const src = frames.find((f) => f.id === id)
+    if (!src) return
+    const canvas = createCanvas(src.canvas.width, src.canvas.height)
+    getContext(canvas, false).drawImage(src.canvas, 0, 0)
+    const base = createCanvas(src.base.width, src.base.height)
+    getContext(base, false).drawImage(src.base, 0, 0)
+    const copy: Frame = {
+      id: nextId++,
+      canvas,
+      base,
+      w: src.w,
+      h: src.h,
+      url: canvas.toDataURL('image/png'),
+      dx: src.dx,
+      dy: src.dy,
+      scale: src.scale,
+    }
+    setFrames((prev) => {
+      const at = prev.findIndex((f) => f.id === id)
+      const next = [...prev]
+      next.splice(at < 0 ? next.length : at + 1, 0, copy)
+      return next
+    })
+  }
+
   function removeFrame(id: number) {
     const idx = frames.findIndex((f) => f.id === id)
     if (idx < 0) return
@@ -725,6 +772,13 @@ export default function SheetEditorTool() {
                 <DownloadButton onClick={exportSheet}>PNG 내보내기</DownloadButton>
                 <button
                   type="button"
+                  onClick={addEmptyFrame}
+                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
+                >
+                  빈 프레임 추가
+                </button>
+                <button
+                  type="button"
                   onClick={() => setFrames([])}
                   className="rounded-lg border border-slate-300 px-3 py-2 text-sm hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
                 >
@@ -892,6 +946,9 @@ export default function SheetEditorTool() {
                       </span>
                       <button type="button" onClick={() => flipFrame(curFrame.id)} className={ctrlBtn}>
                         좌우 반전
+                      </button>
+                      <button type="button" onClick={() => duplicateFrame(curFrame.id)} className={ctrlBtn}>
+                        복사
                       </button>
                       <button type="button" onClick={() => resetFrame(curFrame.id)} className={ctrlBtn}>
                         이 프레임 초기화
