@@ -48,6 +48,8 @@ export default function SheetEditorTool() {
 
   // --- frame pool + output ---
   const [frames, setFrames] = useState<Frame[]>([])
+  // frames removed via the ✕ button, kept so they can be restored
+  const [trash, setTrash] = useState<{ frame: Frame; index: number }[]>([])
   const [outCols, setOutCols] = useState(4)
   const [outPad, setOutPad] = useState(0)
   const [outMargin, setOutMargin] = useState(0)
@@ -75,6 +77,8 @@ export default function SheetEditorTool() {
   const viewRef = useRef({ ds: 1, cellW: 1, cellH: 1 })
   const dragMode = useRef<null | 'sprite' | 'guide' | 'erase'>(null)
   const lastPt = useRef({ x: 0, y: 0 })
+  // carries a target pool index across the animSel-change frameIdx reset
+  const pendingPoolRef = useRef<number | null>(null)
 
   const [error, setError] = useState<string | null>(null)
 
@@ -137,6 +141,19 @@ export default function SheetEditorTool() {
 
   function updateFrame(id: number, patch: (f: Frame) => Partial<Frame>) {
     setFrames((prev) => prev.map((f) => (f.id === id ? { ...f, ...patch(f) } : f)))
+  }
+
+  // select a frame for editing by its pool index (clicking a thumbnail)
+  function selectFrameByPool(i: number) {
+    setPlaying(false)
+    const pos = setIndices.indexOf(i)
+    if (pos >= 0) {
+      setFrameIdx(pos)
+    } else {
+      // frame lives outside the current animation set → reveal it in '전체'
+      pendingPoolRef.current = i
+      setAnimSel('all')
+    }
   }
 
   // staging preview: scaled sheet + grid overlay
@@ -249,9 +266,16 @@ export default function SheetEditorTool() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [curFrame, frames, outLayout, outAnchor, showGuides, baselineFrac])
 
-  // reset playback position when the selected set changes
+  // reset playback position when the selected set changes. If a thumbnail click
+  // switched us to '전체' to reveal a frame, jump to that frame instead of 0.
   useEffect(() => {
-    setFrameIdx(0)
+    const pending = pendingPoolRef.current
+    if (pending != null) {
+      pendingPoolRef.current = null
+      setFrameIdx(pending) // in '전체', frameIdx position === pool index
+    } else {
+      setFrameIdx(0)
+    }
   }, [animSel])
 
   // animation loop
@@ -372,6 +396,22 @@ export default function SheetEditorTool() {
     editRef.current?.releasePointerCapture(e.pointerId)
   }
 
+  function flipFrame(id: number) {
+    const f = frames.find((fr) => fr.id === id)
+    if (!f) return
+    // Mutate the canvas once here — doing it inside the setFrames updater would
+    // flip twice under StrictMode's double-invoked updater and cancel out.
+    const tmp = createCanvas(f.canvas.width, f.canvas.height)
+    const tctx = getContext(tmp, false)
+    tctx.translate(f.canvas.width, 0)
+    tctx.scale(-1, 1)
+    tctx.drawImage(f.canvas, 0, 0)
+    const ctx = getContext(f.canvas, false)
+    ctx.clearRect(0, 0, f.canvas.width, f.canvas.height)
+    ctx.drawImage(tmp, 0, 0)
+    updateFrame(id, (fr) => ({ url: fr.canvas.toDataURL('image/png') }))
+  }
+
   // restore the pristine slice (undoes erasing) and clears the transform
   function resetFrame(id: number) {
     setFrames((prev) =>
@@ -422,7 +462,27 @@ export default function SheetEditorTool() {
   }
 
   function removeFrame(id: number) {
+    const idx = frames.findIndex((f) => f.id === id)
+    if (idx < 0) return
+    // Push to trash OUTSIDE the setFrames updater — running it inside would
+    // double-add under StrictMode's double-invoked updater (see flipFrame).
+    setTrash((t) => [{ frame: frames[idx], index: idx }, ...t])
     setFrames((prev) => prev.filter((f) => f.id !== id))
+  }
+  // re-insert a trashed frame at (close to) its original position
+  function restoreFrame(frameId: number) {
+    const item = trash.find((t) => t.frame.id === frameId)
+    if (!item) return
+    setFrames((prev) => {
+      const next = [...prev]
+      next.splice(Math.min(item.index, next.length), 0, item.frame)
+      return next
+    })
+    setTrash((prev) => prev.filter((t) => t.frame.id !== frameId))
+  }
+  // permanently drop a trashed frame
+  function purgeFrame(frameId: number) {
+    setTrash((prev) => prev.filter((t) => t.frame.id !== frameId))
   }
   function reorder(from: number, to: number) {
     setFrames((prev) => {
@@ -830,6 +890,9 @@ export default function SheetEditorTool() {
                       <span className="tabular-nums">
                         크기 {Math.round(curFrame.scale * 100)}% · 위치 {Math.round(curFrame.dx)},{Math.round(curFrame.dy)}
                       </span>
+                      <button type="button" onClick={() => flipFrame(curFrame.id)} className={ctrlBtn}>
+                        좌우 반전
+                      </button>
                       <button type="button" onClick={() => resetFrame(curFrame.id)} className={ctrlBtn}>
                         이 프레임 초기화
                       </button>
@@ -864,9 +927,14 @@ export default function SheetEditorTool() {
                           : 'border-slate-200 dark:border-slate-700'
                       }`}
                     >
-                      <div className="checkerboard flex h-14 w-full items-center justify-center overflow-hidden rounded">
+                      <button
+                        type="button"
+                        onClick={() => selectFrameByPool(i)}
+                        className="checkerboard flex h-14 w-full cursor-pointer items-center justify-center overflow-hidden rounded"
+                        aria-label={`프레임 ${i + 1} 선택`}
+                      >
                         <img src={f.url} alt={`frame ${i + 1}`} className="max-h-14 max-w-full [image-rendering:pixelated]" />
-                      </div>
+                      </button>
                       <div className="text-[10px] text-slate-400">#{i + 1}</div>
                       <div className="flex gap-0.5">
                         <button type="button" onClick={() => reorder(i, i - 1)} className="rounded border border-slate-300 px-1 text-xs dark:border-slate-700" aria-label="앞으로">◀</button>
@@ -877,6 +945,37 @@ export default function SheetEditorTool() {
                   ))}
                 </div>
               </div>
+
+              {trash.length > 0 && (
+                <div>
+                  <div className="mb-2 text-sm text-slate-500">휴지통 (삭제된 프레임 · 복원 가능)</div>
+                  <div className="flex flex-wrap gap-2">
+                    {trash.map((t) => (
+                      <div
+                        key={t.frame.id}
+                        className="flex w-20 flex-col items-center gap-1 rounded-lg border border-dashed border-slate-300 p-1 opacity-70 dark:border-slate-700"
+                      >
+                        <div className="checkerboard flex h-14 w-full items-center justify-center overflow-hidden rounded">
+                          <img src={t.frame.url} alt="삭제된 프레임" className="max-h-14 max-w-full [image-rendering:pixelated]" />
+                        </div>
+                        <div className="flex gap-1">
+                          <button type="button" onClick={() => restoreFrame(t.frame.id)} className={ctrlBtn}>
+                            복원
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => purgeFrame(t.frame.id)}
+                            className="rounded border border-slate-300 px-1 text-xs text-red-500 dark:border-slate-700"
+                            aria-label="영구 삭제"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </section>
