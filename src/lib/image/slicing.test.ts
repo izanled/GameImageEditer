@@ -14,6 +14,15 @@ describe('sliceByCount', () => {
     expect(totalW).toBe(10)
     expect(cells).toHaveLength(3)
   })
+  it('honours margin and spacing', () => {
+    const cells = sliceByCount(64, 64, 2, 1, 4, 6)
+    expect(cells).toHaveLength(2)
+    expect(cells[0]).toMatchObject({ x: 4, w: 25 })
+    expect(cells[1]).toMatchObject({ x: 35, w: 25 })
+    // outer margins symmetric and the gap equals spacing
+    expect(64 - (cells[1].x + cells[1].w)).toBe(4)
+    expect(cells[1].x - (cells[0].x + cells[0].w)).toBe(6)
+  })
 })
 
 describe('sliceBySize', () => {
@@ -23,6 +32,13 @@ describe('sliceBySize', () => {
     const last = cells[cells.length - 1]
     expect(last.w).toBe(10)
     expect(last.h).toBe(10)
+  })
+  it('offsets by margin and steps by cell+spacing', () => {
+    const cells = sliceBySize(40, 20, 10, 10, 2, 4) // step 14 -> 3 cols x 2 rows
+    expect(cells).toHaveLength(6)
+    expect(cells[0]).toMatchObject({ x: 2, y: 2, w: 10, h: 10 })
+    const last = cells[cells.length - 1]
+    expect(last).toMatchObject({ x: 30, y: 16, w: 10, h: 4 })
   })
 })
 

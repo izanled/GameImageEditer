@@ -6,7 +6,8 @@ import { getTool } from '../registry'
 import type { LoadedImage } from '../../lib/image/load'
 import { createCanvas, getContext } from '../../lib/image/draw'
 import { canvasToBlob, downloadBlob } from '../../lib/image/export'
-import { ANCHORS, type Anchor } from '../../lib/image/canvasResize'
+import { encodeGif } from '../../lib/image/gif'
+import { ANCHORS, anchorOffset, type Anchor } from '../../lib/image/canvasResize'
 import { computeLayout } from '../../lib/image/packSheet'
 
 const tool = getTool('sprite-sheet')!
@@ -28,6 +29,8 @@ export default function SpriteSheetTool() {
   const [anchor, setAnchor] = useState<Anchor>('center')
   const [transparent, setTransparent] = useState(true)
   const [bg, setBg] = useState('#ffffff')
+  const [gifTarget, setGifTarget] = useState('all')
+  const [gifFps, setGifFps] = useState(8)
   const [error, setError] = useState<string | null>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
@@ -109,6 +112,43 @@ export default function SpriteSheetTool() {
     }
     const blob = await canvasToBlob(canvas, 'image/png')
     downloadBlob(blob, 'spritesheet.png')
+  }
+
+  // GIF export: whole sheet (전체) or a single row (행 N), in frame order.
+  const gifOptions = useMemo(() => {
+    const opts = [{ value: 'all', label: `전체 (${frames.length})` }]
+    for (let r = 0; r < layout.rows; r++) {
+      const count = frames.filter((_, i) => Math.floor(i / cols) === r).length
+      if (count) opts.push({ value: `row:${r}`, label: `행 ${r + 1} (${count})` })
+    }
+    return opts
+  }, [frames, cols, layout.rows])
+
+  function exportGif() {
+    if (frames.length === 0 || layout.cellW < 1 || layout.cellH < 1) return
+    const all = frames.map((_, i) => i)
+    const idxs = gifTarget.startsWith('row:')
+      ? all.filter((i) => Math.floor(i / cols) === Number(gifTarget.slice(4)))
+      : all
+    if (idxs.length === 0) return
+    setError(null)
+    const cw = layout.cellW
+    const ch = layout.cellH
+    const cells = idxs.map((i) => {
+      const f = frames[i]
+      const canvas = createCanvas(cw, ch)
+      const ctx = getContext(canvas, false)
+      if (!transparent) {
+        ctx.fillStyle = bg
+        ctx.fillRect(0, 0, cw, ch)
+      }
+      const [ox, oy] = anchorOffset(anchor, cw, ch, f.img.width, f.img.height)
+      ctx.drawImage(f.img.el, ox, oy, f.img.width, f.img.height)
+      return canvas
+    })
+    const blob = encodeGif(cells, { fps: gifFps, transparent })
+    const suffix = gifTarget.startsWith('row:') ? `_row${Number(gifTarget.slice(4)) + 1}` : ''
+    downloadBlob(blob, `spritesheet${suffix}.gif`)
   }
 
   return (
@@ -211,6 +251,38 @@ export default function SpriteSheetTool() {
               >
                 전체 삭제
               </button>
+            </div>
+
+            <div className="space-y-2 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+              <div className="text-sm font-medium">GIF 애니메이션</div>
+              <label className="block text-sm">
+                대상
+                <select
+                  value={gifTarget}
+                  onChange={(e) => setGifTarget(e.target.value)}
+                  className="mt-1 w-full rounded-md border border-slate-300 bg-transparent px-2 py-1.5 dark:border-slate-700"
+                >
+                  {gifOptions.map((o) => (
+                    <option key={o.value} value={o.value} className="dark:bg-slate-800">
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                FPS
+                <input
+                  type="number"
+                  min={1}
+                  max={60}
+                  value={gifFps}
+                  onChange={(e) =>
+                    setGifFps(Math.max(1, Math.min(60, Number(e.target.value) | 0)))
+                  }
+                  className="w-16 rounded-md border border-slate-300 bg-transparent px-2 py-1 dark:border-slate-700"
+                />
+              </label>
+              <DownloadButton onClick={exportGif}>GIF 내보내기</DownloadButton>
             </div>
           </div>
 

@@ -154,7 +154,7 @@ export default function CropTool() {
               onPointerDown={onPointerDown}
               onPointerMove={onPointerMove}
               onPointerUp={onPointerUp}
-              className="relative inline-block max-w-full cursor-crosshair touch-none select-none"
+              className="checkerboard relative inline-block max-w-full overflow-hidden cursor-crosshair touch-none select-none rounded border border-slate-200 dark:border-slate-700"
             >
               <img
                 ref={imgRef}

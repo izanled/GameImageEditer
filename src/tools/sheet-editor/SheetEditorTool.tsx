@@ -6,6 +6,7 @@ import { getTool } from '../registry'
 import type { LoadedImage } from '../../lib/image/load'
 import { createCanvas, getContext } from '../../lib/image/draw'
 import { canvasToBlob, downloadBlob } from '../../lib/image/export'
+import { encodeGif } from '../../lib/image/gif'
 import { ANCHORS, anchorOffset, type Anchor } from '../../lib/image/canvasResize'
 import { sliceByCount, sliceBySize } from '../../lib/image/gridSlice'
 import { computeLayout } from '../../lib/image/packSheet'
@@ -16,6 +17,8 @@ const MAX_SIDE = 16384
 interface Frame {
   id: number
   canvas: HTMLCanvasElement
+  /** Pristine copy of the sliced pixels, used to undo erasing on reset. */
+  base: HTMLCanvasElement
   w: number
   h: number
   url: string
@@ -37,6 +40,10 @@ export default function SheetEditorTool() {
   const [rows, setRows] = useState(4)
   const [cellW, setCellW] = useState(32)
   const [cellH, setCellH] = useState(32)
+  // grid spacing in the *source* sheet, plus an inward shave to drop edge bleed
+  const [srcMargin, setSrcMargin] = useState(0)
+  const [srcSpacing, setSrcSpacing] = useState(0)
+  const [srcInset, setSrcInset] = useState(0)
   const stageRef = useRef<HTMLCanvasElement>(null)
 
   // --- frame pool + output ---
@@ -47,6 +54,8 @@ export default function SheetEditorTool() {
   const [outAnchor, setOutAnchor] = useState<Anchor>('center')
   const [transparent, setTransparent] = useState(true)
   const [bg, setBg] = useState('#ffffff')
+  const [gifTarget, setGifTarget] = useState('all')
+  const [gifFps, setGifFps] = useState(8)
   const outRef = useRef<HTMLCanvasElement>(null)
   const dragIndex = useRef<number | null>(null)
 
@@ -57,20 +66,37 @@ export default function SheetEditorTool() {
   const [frameIdx, setFrameIdx] = useState(0)
   const [showGuides, setShowGuides] = useState(true)
   const [baselineFrac, setBaselineFrac] = useState(0.85)
+  const [editTool, setEditTool] = useState<'move' | 'erase'>('move')
+  const [brush, setBrush] = useState(12)
+  const [brushShape, setBrushShape] = useState<'round' | 'square'>('round')
   const editRef = useRef<HTMLCanvasElement>(null)
+  const brushRef = useRef<HTMLDivElement>(null)
   // live view metrics for pointer math (kept in a ref to avoid stale closures)
   const viewRef = useRef({ ds: 1, cellW: 1, cellH: 1 })
-  const dragMode = useRef<null | 'sprite' | 'guide'>(null)
+  const dragMode = useRef<null | 'sprite' | 'guide' | 'erase'>(null)
   const lastPt = useRef({ x: 0, y: 0 })
 
   const [error, setError] = useState<string | null>(null)
 
   const stageCells = useMemo(() => {
     if (!staging) return []
-    return mode === 'count'
-      ? sliceByCount(staging.width, staging.height, Math.max(1, cols), Math.max(1, rows))
-      : sliceBySize(staging.width, staging.height, Math.max(1, cellW), Math.max(1, cellH))
-  }, [staging, mode, cols, rows, cellW, cellH])
+    const base =
+      mode === 'count'
+        ? sliceByCount(staging.width, staging.height, Math.max(1, cols), Math.max(1, rows), srcMargin, srcSpacing)
+        : sliceBySize(staging.width, staging.height, Math.max(1, cellW), Math.max(1, cellH), srcMargin, srcSpacing)
+    if (srcInset === 0) return base
+    // positive inset shaves each cell inward (drop bleed); negative inset grows
+    // each cell outward to recover pixels that spilled into neighbour frames
+    return base
+      .map((c) => ({
+        ...c,
+        x: c.x + srcInset,
+        y: c.y + srcInset,
+        w: c.w - 2 * srcInset,
+        h: c.h - 2 * srcInset,
+      }))
+      .filter((c) => c.w > 0 && c.h > 0)
+  }, [staging, mode, cols, rows, cellW, cellH, srcMargin, srcSpacing, srcInset])
 
   const outLayout = useMemo(
     () =>
@@ -174,8 +200,8 @@ export default function SheetEditorTool() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [frames, outLayout, transparent, bg])
 
-  // per-frame editor / animation frame render
-  useEffect(() => {
+  // per-frame editor / animation frame render. Reused live while erasing.
+  function redrawEditor() {
     const canvas = editRef.current
     if (!canvas || !curFrame || outLayout.cellW < 1) return
     const cw = outLayout.cellW
@@ -184,8 +210,8 @@ export default function SheetEditorTool() {
     viewRef.current = { ds, cellW: cw, cellH: ch }
     const dw = Math.max(1, Math.round(cw * ds))
     const dh = Math.max(1, Math.round(ch * ds))
-    canvas.width = dw
-    canvas.height = dh
+    if (canvas.width !== dw) canvas.width = dw
+    if (canvas.height !== dh) canvas.height = dh
     const ctx = getContext(canvas, false)
     ctx.clearRect(0, 0, dw, dh)
 
@@ -216,6 +242,10 @@ export default function SheetEditorTool() {
       ctx.lineTo(dw, gy)
       ctx.stroke()
     }
+  }
+
+  useEffect(() => {
+    redrawEditor()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [curFrame, frames, outLayout, outAnchor, showGuides, baselineFrac])
 
@@ -249,20 +279,79 @@ export default function SheetEditorTool() {
     return () => canvas.removeEventListener('wheel', onWheel)
   }, [curFrame?.id])
 
+  // hide the brush indicator whenever we leave erase mode
+  useEffect(() => {
+    if (editTool !== 'erase' && brushRef.current) brushRef.current.style.display = 'none'
+  }, [editTool])
+
+  // erase a brush dab at the pointer, mapping display px -> source-canvas px
+  function eraseAt(e: React.PointerEvent<HTMLCanvasElement>) {
+    const f = curFrame
+    if (!f) return
+    const rect = editRef.current!.getBoundingClientRect()
+    const { ds, cellW: cw, cellH: ch } = viewRef.current
+    const px = e.clientX - rect.left
+    const py = e.clientY - rect.top
+    const fw = Math.max(1, Math.round(f.w * f.scale))
+    const fh = Math.max(1, Math.round(f.h * f.scale))
+    const [bx, by] = anchorOffset(outAnchor, cw, ch, fw, fh)
+    const srcX = ((px / ds - (bx + f.dx)) / fw) * f.w
+    const srcY = ((py / ds - (by + f.dy)) / fh) * f.h
+    const srcR = Math.max(0.5, brush / 2 / (f.scale * ds))
+    const ctx = getContext(f.canvas, false)
+    ctx.save()
+    ctx.globalCompositeOperation = 'destination-out'
+    if (brushShape === 'square') {
+      ctx.fillRect(srcX - srcR, srcY - srcR, srcR * 2, srcR * 2)
+    } else {
+      ctx.beginPath()
+      ctx.arc(srcX, srcY, srcR, 0, Math.PI * 2)
+      ctx.fill()
+    }
+    ctx.restore()
+    redrawEditor()
+  }
+
+  // move the round brush-size indicator to follow the cursor (erase mode only)
+  function updateBrushCursor(e: React.PointerEvent<HTMLCanvasElement>) {
+    const el = brushRef.current
+    if (!el) return
+    if (editTool !== 'erase') {
+      el.style.display = 'none'
+      return
+    }
+    const rect = editRef.current!.getBoundingClientRect()
+    el.style.display = 'block'
+    el.style.width = `${brush}px`
+    el.style.height = `${brush}px`
+    el.style.left = `${e.clientX - rect.left}px`
+    el.style.top = `${e.clientY - rect.top}px`
+  }
+
   function onEditPointerDown(e: React.PointerEvent<HTMLCanvasElement>) {
     if (!curFrame) return
     setPlaying(false)
     const canvas = editRef.current!
+    canvas.setPointerCapture(e.pointerId)
+    if (editTool === 'erase') {
+      dragMode.current = 'erase'
+      eraseAt(e)
+      return
+    }
     const rect = canvas.getBoundingClientRect()
     const { ds, cellH: ch } = viewRef.current
     const my = e.clientY - rect.top
     const gy = baselineFrac * ch * ds
     dragMode.current = showGuides && Math.abs(my - gy) <= 6 ? 'guide' : 'sprite'
     lastPt.current = { x: e.clientX, y: e.clientY }
-    canvas.setPointerCapture(e.pointerId)
   }
   function onEditPointerMove(e: React.PointerEvent<HTMLCanvasElement>) {
+    updateBrushCursor(e)
     if (!dragMode.current || !curFrame) return
+    if (dragMode.current === 'erase') {
+      eraseAt(e)
+      return
+    }
     const { ds, cellH: ch } = viewRef.current
     if (dragMode.current === 'guide') {
       const rect = editRef.current!.getBoundingClientRect()
@@ -275,25 +364,53 @@ export default function SheetEditorTool() {
     lastPt.current = { x: e.clientX, y: e.clientY }
   }
   function onEditPointerUp(e: React.PointerEvent<HTMLCanvasElement>) {
+    // commit erasing: refresh the thumbnail and let previews repaint
+    if (dragMode.current === 'erase' && curFrame) {
+      updateFrame(curFrame.id, (f) => ({ url: f.canvas.toDataURL('image/png') }))
+    }
     dragMode.current = null
     editRef.current?.releasePointerCapture(e.pointerId)
   }
 
+  // restore the pristine slice (undoes erasing) and clears the transform
   function resetFrame(id: number) {
-    updateFrame(id, () => ({ dx: 0, dy: 0, scale: 1 }))
+    setFrames((prev) =>
+      prev.map((f) => {
+        if (f.id !== id) return f
+        const ctx = getContext(f.canvas, false)
+        ctx.clearRect(0, 0, f.canvas.width, f.canvas.height)
+        ctx.drawImage(f.base, 0, 0)
+        return { ...f, dx: 0, dy: 0, scale: 1, url: f.canvas.toDataURL('image/png') }
+      }),
+    )
   }
 
   function addFromStaging() {
     if (!staging || stageCells.length === 0) return
+    const iw = staging.width
+    const ih = staging.height
     const added: Frame[] = stageCells.map((c) => {
-      const canvas = createCanvas(c.w, c.h)
+      const cw = Math.max(1, c.w)
+      const ch = Math.max(1, c.h)
+      const canvas = createCanvas(cw, ch)
       const ctx = getContext(canvas, false)
-      ctx.drawImage(staging.el, c.x, c.y, c.w, c.h, 0, 0, c.w, c.h)
+      // a cell may reach outside the sheet (negative margin/spacing/inset).
+      // draw only the part that overlaps the image; the rest stays transparent.
+      const sx = Math.max(0, c.x)
+      const sy = Math.max(0, c.y)
+      const sw = Math.min(iw, c.x + cw) - sx
+      const sh = Math.min(ih, c.y + ch) - sy
+      if (sw > 0 && sh > 0) {
+        ctx.drawImage(staging.el, sx, sy, sw, sh, sx - c.x, sy - c.y, sw, sh)
+      }
+      const base = createCanvas(cw, ch)
+      getContext(base, false).drawImage(canvas, 0, 0)
       return {
         id: nextId++,
         canvas,
-        w: c.w,
-        h: c.h,
+        base,
+        w: cw,
+        h: ch,
         url: canvas.toDataURL('image/png'),
         dx: 0,
         dy: 0,
@@ -330,6 +447,52 @@ export default function SheetEditorTool() {
     paintSheet(ctx, 1, true)
     const blob = await canvasToBlob(canvas, 'image/png')
     downloadBlob(blob, 'spritesheet_edited.png')
+  }
+
+  // GIF export: whole sheet (전체) or a single row (행 N). Pool order is preserved.
+  const gifOptions = useMemo(() => {
+    const opts = [{ value: 'all', label: `전체 (${frames.length})` }]
+    for (let r = 0; r < outLayout.rows; r++) {
+      const count = frames.filter((_, i) => Math.floor(i / outCols) === r).length
+      if (count) opts.push({ value: `row:${r}`, label: `행 ${r + 1} (${count})` })
+    }
+    return opts
+  }, [frames, outCols, outLayout.rows])
+
+  function gifFrameIndices(): number[] {
+    const all = frames.map((_, i) => i)
+    if (gifTarget.startsWith('row:')) {
+      const r = Number(gifTarget.slice(4))
+      return all.filter((i) => Math.floor(i / outCols) === r)
+    }
+    return all
+  }
+
+  // render one animation frame (a single cell, with its per-frame transform) at 1:1
+  function renderGifCell(f: Frame): HTMLCanvasElement {
+    const cw = outLayout.cellW
+    const ch = outLayout.cellH
+    const canvas = createCanvas(cw, ch)
+    const ctx = getContext(canvas, false)
+    if (!transparent) {
+      ctx.fillStyle = bg
+      ctx.fillRect(0, 0, cw, ch)
+    }
+    const fw = Math.max(1, Math.round(f.w * f.scale))
+    const fh = Math.max(1, Math.round(f.h * f.scale))
+    const [bx, by] = anchorOffset(outAnchor, cw, ch, fw, fh)
+    ctx.drawImage(f.canvas, bx + f.dx, by + f.dy, fw, fh)
+    return canvas
+  }
+
+  function exportGif() {
+    const idxs = gifFrameIndices()
+    if (idxs.length === 0 || outLayout.cellW < 1 || outLayout.cellH < 1) return
+    setError(null)
+    const cells = idxs.map((i) => renderGifCell(frames[i]))
+    const blob = encodeGif(cells, { fps: gifFps, transparent })
+    const suffix = gifTarget.startsWith('row:') ? `_row${Number(gifTarget.slice(4)) + 1}` : ''
+    downloadBlob(blob, `spritesheet_edited${suffix}.gif`)
   }
 
   // animation set options for the combobox
@@ -400,6 +563,23 @@ export default function SheetEditorTool() {
                   </label>
                 </div>
               )}
+              <div className="grid grid-cols-2 gap-3">
+                <label className="text-sm">
+                  여백
+                  <input type="number" value={srcMargin} onChange={(e) => setSrcMargin(clamp(Number(e.target.value) | 0, -2048, 2048))} className={numInput} />
+                </label>
+                <label className="text-sm">
+                  간격
+                  <input type="number" value={srcSpacing} onChange={(e) => setSrcSpacing(clamp(Number(e.target.value) | 0, -2048, 2048))} className={numInput} />
+                </label>
+              </div>
+              <label className="block text-sm">
+                가장자리 (음수=확장)
+                <input type="number" value={srcInset} onChange={(e) => setSrcInset(clamp(Number(e.target.value) | 0, -2048, 2048))} className={numInput} />
+              </label>
+              <p className="text-xs text-slate-400">
+                양수는 칸을 좁혀 이웃 픽셀을 잘라냅니다. <strong>음수</strong>를 넣으면 칸을 키워 옆 프레임으로 침범한 픽셀까지 되살립니다(프레임이 커지고 서로 겹침 → 겹친 부분은 지우개로 정리).
+              </p>
               <div className="text-sm text-slate-500">자를 셀: {stageCells.length}개</div>
               <div className="flex flex-wrap gap-2">
                 <button
@@ -491,6 +671,36 @@ export default function SheetEditorTool() {
                   전체 삭제
                 </button>
               </div>
+
+              <div className="space-y-2 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+                <div className="text-sm font-medium">GIF 애니메이션</div>
+                <label className="block text-sm">
+                  대상
+                  <select
+                    value={gifTarget}
+                    onChange={(e) => setGifTarget(e.target.value)}
+                    className="mt-1 w-full rounded-md border border-slate-300 bg-transparent px-2 py-1.5 dark:border-slate-700"
+                  >
+                    {gifOptions.map((o) => (
+                      <option key={o.value} value={o.value} className="dark:bg-slate-800">
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  FPS
+                  <input
+                    type="number"
+                    min={1}
+                    max={60}
+                    value={gifFps}
+                    onChange={(e) => setGifFps(clamp(Number(e.target.value) | 0, 1, 60))}
+                    className="w-16 rounded-md border border-slate-300 bg-transparent px-2 py-1 dark:border-slate-700"
+                  />
+                </label>
+                <DownloadButton onClick={exportGif}>GIF 내보내기</DownloadButton>
+              </div>
             </div>
 
             <div className="min-w-0 flex-1 space-y-4">
@@ -547,15 +757,73 @@ export default function SheetEditorTool() {
                       <input type="checkbox" checked={showGuides} onChange={(e) => setShowGuides(e.target.checked)} />
                       기준선
                     </label>
+                    <div className="inline-flex rounded-md border border-slate-300 p-0.5 dark:border-slate-700">
+                      <button
+                        type="button"
+                        onClick={() => setEditTool('move')}
+                        className={`rounded px-2 py-0.5 text-xs ${editTool === 'move' ? 'bg-indigo-600 text-white' : ''}`}
+                      >
+                        이동
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditTool('erase')}
+                        className={`rounded px-2 py-0.5 text-xs ${editTool === 'erase' ? 'bg-indigo-600 text-white' : ''}`}
+                      >
+                        지우개
+                      </button>
+                    </div>
+                    {editTool === 'erase' && (
+                      <>
+                        <label className="flex items-center gap-1">
+                          굵기
+                          <input
+                            type="number"
+                            min={2}
+                            max={64}
+                            value={brush}
+                            onChange={(e) => setBrush(clamp(Number(e.target.value) | 0, 2, 64))}
+                            className="w-14 rounded-md border border-slate-300 bg-transparent px-2 py-1 dark:border-slate-700"
+                          />
+                        </label>
+                        <div className="inline-flex rounded-md border border-slate-300 p-0.5 dark:border-slate-700">
+                          <button
+                            type="button"
+                            onClick={() => setBrushShape('round')}
+                            aria-label="원형 지우개"
+                            className={`rounded px-2 py-0.5 text-xs ${brushShape === 'round' ? 'bg-indigo-600 text-white' : ''}`}
+                          >
+                            ● 원
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setBrushShape('square')}
+                            aria-label="사각 지우개"
+                            className={`rounded px-2 py-0.5 text-xs ${brushShape === 'square' ? 'bg-indigo-600 text-white' : ''}`}
+                          >
+                            ■ 사각
+                          </button>
+                        </div>
+                      </>
+                    )}
                   </div>
                   <div className="checkerboard inline-block max-w-full overflow-auto rounded border border-slate-200 dark:border-slate-700">
-                    <canvas
-                      ref={editRef}
-                      onPointerDown={onEditPointerDown}
-                      onPointerMove={onEditPointerMove}
-                      onPointerUp={onEditPointerUp}
-                      className="block touch-none cursor-move [image-rendering:pixelated]"
-                    />
+                    <div className="relative w-max">
+                      <canvas
+                        ref={editRef}
+                        onPointerDown={onEditPointerDown}
+                        onPointerMove={onEditPointerMove}
+                        onPointerUp={onEditPointerUp}
+                        onPointerEnter={updateBrushCursor}
+                        onPointerLeave={() => { if (brushRef.current) brushRef.current.style.display = 'none' }}
+                        className={`block touch-none [image-rendering:pixelated] ${editTool === 'erase' ? 'cursor-crosshair' : 'cursor-move'}`}
+                      />
+                      <div
+                        ref={brushRef}
+                        className={`pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 border border-white shadow-[0_0_0_1px_rgba(0,0,0,0.6)] ${brushShape === 'square' ? 'rounded-none' : 'rounded-full'}`}
+                        style={{ display: 'none', boxSizing: 'border-box' }}
+                      />
+                    </div>
                   </div>
                   {curFrame && (
                     <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
@@ -568,7 +836,9 @@ export default function SheetEditorTool() {
                     </div>
                   )}
                   <p className="text-xs text-slate-400">
-                    드래그로 위치 이동 · 휠로 크기 조정 · 빨간 가로선 드래그로 기준선 이동(모든 프레임 공통)
+                    {editTool === 'erase'
+                      ? '지우개: 드래그로 군더더기 픽셀 삭제 · "이 프레임 초기화"로 되돌리기'
+                      : '드래그로 위치 이동 · 휠로 크기 조정 · 빨간 가로선 드래그로 기준선 이동(모든 프레임 공통)'}
                   </p>
                 </div>
               </div>
