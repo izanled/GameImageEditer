@@ -69,6 +69,17 @@ Cloudflare Pages 25MB **파일 크기 제한을 넘기므로 GitHub Releases에 
 3. [`src/config.ts`](src/config.ts)의 `LOCAL_MODULE_DOWNLOAD_URL`을 해당 릴리스 주소로 교체.
    - 앱의 **배경 제거 → 로컬 모듈** 패널에 "다운로드" 버튼이 그 주소로 연결됩니다.
 
+**자동 빌드·배포 (권장):** 버전 태그를 푸시하면 [`.github/workflows/release-exe.yml`](.github/workflows/release-exe.yml)이
+Windows에서 exe를 빌드해 그 태그의 Release에 자동 첨부합니다. 위 1~2단계가 필요 없습니다.
+
+```bash
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+> `LOCAL_MODULE_DOWNLOAD_URL`은 `releases/latest`를 가리키므로 새 태그를 올릴 때마다
+> 버튼이 자동으로 최신 exe를 받습니다.
+
 ### 배경 제거 성능 (선택) — COOP/COEP 헤더
 
 배경 제거의 멀티스레드 WASM 가속을 켜려면 호스트에서 아래 헤더를 설정하세요

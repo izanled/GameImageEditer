@@ -3,6 +3,7 @@ import { Routes, Route } from 'react-router-dom'
 import Layout from './components/layout/Layout'
 import Home from './pages/Home'
 import ToolPlaceholder from './pages/ToolPlaceholder'
+import BackgroundRemovalGuide from './pages/BackgroundRemovalGuide'
 import { TOOLS } from './tools/registry'
 import ResizeTool from './tools/resize/ResizeTool'
 import CanvasResizeTool from './tools/canvas-resize/CanvasResizeTool'
@@ -29,6 +30,7 @@ export default function App() {
     <Layout>
       <Routes>
         <Route path="/" element={<Home />} />
+        <Route path="/guide/background-removal" element={<BackgroundRemovalGuide />} />
         {TOOLS.map((tool) => {
           const Tool = COMPONENTS[tool.id]
           return (
