@@ -24,6 +24,7 @@
     "react-dom": "^19.2.7",
     "react-image-crop": "^11.1.2",
     "react-router-dom": "^7.18.0",
+    "upng-js": "^2.1.0",
     "zustand": "^5.0.14"
   },
   "devDependencies": {

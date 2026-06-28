@@ -85,6 +85,16 @@ export const TOOLS: ToolDef[] = [
     ready: true,
   },
   {
+    id: 'compress',
+    path: '/compress',
+    title: '이미지 압축',
+    short: 'PNG·JPG 품질을 조절해 용량을 줄입니다.',
+    description:
+      '고퀄리티 이미지를 PNG 또는 JPG로 다시 인코딩해 용량을 줄입니다. 포맷별로 품질(JPG)·색상 수(PNG)를 조절하고, 여러 장은 ZIP으로 한 번에 받습니다.',
+    icon: '🗜️',
+    ready: true,
+  },
+  {
     id: 'grid-slice',
     path: '/grid-slice',
     title: '그리드 분할',
