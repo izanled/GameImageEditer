@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import ThemeToggle from './ThemeToggle'
+import PreviewBgPicker from './PreviewBgPicker'
 
 export default function Header() {
   return (
@@ -9,7 +10,10 @@ export default function Header() {
           <span>🎮</span>
           <span>게임 이미지 툴킷</span>
         </Link>
-        <ThemeToggle />
+        <div className="flex items-center gap-3">
+          <PreviewBgPicker />
+          <ThemeToggle />
+        </div>
       </div>
     </header>
   )
