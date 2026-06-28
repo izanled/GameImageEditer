@@ -14,6 +14,8 @@ import ChromaKeyTool from './tools/chroma-key/ChromaKeyTool'
 import SpriteSheetTool from './tools/sprite-sheet/SpriteSheetTool'
 import SheetEditorTool from './tools/sheet-editor/SheetEditorTool'
 import CompressTool from './tools/compress/CompressTool'
+import ColorAdjustTool from './tools/color-adjust/ColorAdjustTool'
+import PaletteTool from './tools/palette/PaletteTool'
 
 const COMPONENTS: Record<string, ComponentType> = {
   'background-removal': BackgroundRemovalTool,
@@ -24,6 +26,8 @@ const COMPONENTS: Record<string, ComponentType> = {
   'sprite-sheet': SpriteSheetTool,
   'sheet-editor': SheetEditorTool,
   compress: CompressTool,
+  'color-adjust': ColorAdjustTool,
+  palette: PaletteTool,
   'grid-slice': GridSliceTool,
 }
 

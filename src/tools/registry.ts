@@ -95,6 +95,26 @@ export const TOOLS: ToolDef[] = [
     ready: true,
   },
   {
+    id: 'color-adjust',
+    path: '/color-adjust',
+    title: '색상 조절',
+    short: '밝기·대비·채도·색조 등 포토샵식 색 보정.',
+    description:
+      '밝기·대비·채도·색조·색온도·감마와 포스터화·반전·흑백·세피아까지, 포토샵식 색 보정을 실시간 미리보기로 적용합니다.',
+    icon: '🎨',
+    ready: true,
+  },
+  {
+    id: 'palette',
+    path: '/palette',
+    title: '팔레트 교체',
+    short: '팔레트를 추출해 다른 팔레트로 다시 칠합니다.',
+    description:
+      '이미지에서 색 팔레트를 추출하고, 레퍼런스 이미지의 팔레트나 직접 편집한 팔레트로 다시 칠합니다. 각 픽셀을 가장 가까운 팔레트 색으로 매핑해 픽셀아트 느낌의 색감 변환을 만듭니다.',
+    icon: '🌈',
+    ready: true,
+  },
+  {
     id: 'grid-slice',
     path: '/grid-slice',
     title: '그리드 분할',
