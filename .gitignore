@@ -1,0 +1,21 @@
+node_modules
+dist
+dist-ssr
+*.local
+.DS_Store
+.vite
+coverage
+
+# Python local module (rembg)
+local-module/.venv*/
+__pycache__/
+*.pyc
+local-module/build/
+*.spec
+
+# Tooling / agent state
+.omc/
+.plugin-config/
+.claude/
+.complexity-log.md
+*project-structure.md
