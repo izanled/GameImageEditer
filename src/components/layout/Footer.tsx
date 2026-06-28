@@ -20,6 +20,7 @@ export default function Footer() {
       />
       <div className="px-16 py-3 text-center text-sm text-slate-500 sm:px-32">
         <p className="mt-1">© 2026 고양이성공단 · 숙빠 · 아리아빠</p>
+        <p className="mt-1 text-xs text-slate-400">마지막 업데이트: 2026-06-28</p>
       </div>
     </footer>
   )

@@ -1,3 +1,9 @@
+export interface ToolCategory {
+  id: string
+  label: string
+  description: string
+}
+
 export interface ToolDef {
   id: string
   /** Route path (used with HashRouter). */
@@ -11,7 +17,15 @@ export interface ToolDef {
   icon: string
   /** Whether the tool is implemented yet. */
   ready: boolean
+  category: string
 }
+
+export const CATEGORIES: ToolCategory[] = [
+  { id: 'background', label: '배경 처리', description: '배경 제거 · 크로마키' },
+  { id: 'editing', label: '기본 편집', description: '자르기 · 크기 조절 · 압축' },
+  { id: 'color', label: '색상 도구', description: '색 보정 · 팔레트 교체' },
+  { id: 'sprite', label: '스프라이트 / 게임', description: '시트 제작 · 편집 · 분할' },
+]
 
 export const TOOLS: ToolDef[] = [
   {
@@ -23,6 +37,7 @@ export const TOOLS: ToolDef[] = [
       'AI로 배경을 자동 제거하여 투명 PNG로 저장합니다. 모든 처리는 브라우저에서 이루어져 업로드가 없습니다.',
     icon: '🪄',
     ready: true,
+    category: 'background',
   },
   {
     id: 'chroma-key',
@@ -33,6 +48,7 @@ export const TOOLS: ToolDef[] = [
       '크로마키(단색) 배경을 색상 기준으로 제거합니다. 가장자리 색 번짐 제거(디프린지)와 테두리 다듬기로 깔끔한 외곽선을 만듭니다. 시안·마젠타 등 단색 배경 스프라이트에 적합합니다.',
     icon: '🎬',
     ready: true,
+    category: 'background',
   },
   {
     id: 'crop',
@@ -43,6 +59,7 @@ export const TOOLS: ToolDef[] = [
       '드래그 또는 수치 입력으로 원하는 영역을 픽셀 단위로 정확하게 잘라냅니다.',
     icon: '✂️',
     ready: true,
+    category: 'editing',
   },
   {
     id: 'resize',
@@ -53,6 +70,7 @@ export const TOOLS: ToolDef[] = [
       '픽셀 또는 퍼센트로 이미지 크기를 변경합니다. 픽셀아트를 위한 Nearest-neighbor 보간과 정수 배율(2x·3x·4x)을 지원합니다.',
     icon: '📐',
     ready: true,
+    category: 'editing',
   },
   {
     id: 'canvas-resize',
@@ -63,26 +81,7 @@ export const TOOLS: ToolDef[] = [
       '이미지 내용은 그대로 유지하고 캔버스 크기를 조절합니다. 9방향 앵커와 투명/색상 여백 채움을 지원합니다.',
     icon: '🖼️',
     ready: true,
-  },
-  {
-    id: 'sprite-sheet',
-    path: '/sprite-sheet',
-    title: '스프라이트 시트 만들기',
-    short: '여러 이미지를 격자로 합쳐 한 장의 시트로 만듭니다.',
-    description:
-      '여러 프레임 이미지를 균일한 격자로 합쳐 스프라이트 시트를 만듭니다. 열 수·간격·정렬을 지정할 수 있어 애니메이션 캐릭터 시트 제작에 적합합니다.',
-    icon: '🎞️',
-    ready: true,
-  },
-  {
-    id: 'sheet-editor',
-    path: '/sheet-editor',
-    title: '스프라이트 시트 편집',
-    short: '시트를 격자로 나눠 순서를 바꿔 다시 내보냅니다.',
-    description:
-      '스프라이트 시트를 불러와 격자로 나눈 뒤, 프레임 순서를 자유롭게 바꾸거나 여러 시트의 프레임을 섞어 새 시트로 내보냅니다. 실시간 미리보기를 제공합니다.',
-    icon: '🔀',
-    ready: true,
+    category: 'editing',
   },
   {
     id: 'compress',
@@ -93,6 +92,7 @@ export const TOOLS: ToolDef[] = [
       '고퀄리티 이미지를 PNG 또는 JPG로 다시 인코딩해 용량을 줄입니다. 포맷별로 품질(JPG)·색상 수(PNG)를 조절하고, 여러 장은 ZIP으로 한 번에 받습니다.',
     icon: '🗜️',
     ready: true,
+    category: 'editing',
   },
   {
     id: 'color-adjust',
@@ -103,6 +103,7 @@ export const TOOLS: ToolDef[] = [
       '밝기·대비·채도·색조·색온도·감마와 포스터화·반전·흑백·세피아까지, 포토샵식 색 보정을 실시간 미리보기로 적용합니다.',
     icon: '🎨',
     ready: true,
+    category: 'color',
   },
   {
     id: 'palette',
@@ -113,6 +114,29 @@ export const TOOLS: ToolDef[] = [
       '이미지에서 색 팔레트를 추출하고, 레퍼런스 이미지의 팔레트나 직접 편집한 팔레트로 다시 칠합니다. 각 픽셀을 가장 가까운 팔레트 색으로 매핑해 픽셀아트 느낌의 색감 변환을 만듭니다.',
     icon: '🌈',
     ready: true,
+    category: 'color',
+  },
+  {
+    id: 'sprite-sheet',
+    path: '/sprite-sheet',
+    title: '스프라이트 시트 만들기',
+    short: '여러 이미지를 격자로 합쳐 한 장의 시트로 만듭니다.',
+    description:
+      '여러 프레임 이미지를 균일한 격자로 합쳐 스프라이트 시트를 만듭니다. 열 수·간격·정렬을 지정할 수 있어 애니메이션 캐릭터 시트 제작에 적합합니다.',
+    icon: '🎞️',
+    ready: true,
+    category: 'sprite',
+  },
+  {
+    id: 'sheet-editor',
+    path: '/sheet-editor',
+    title: '스프라이트 시트 편집',
+    short: '시트를 격자로 나눠 순서를 바꿔 다시 내보냅니다.',
+    description:
+      '스프라이트 시트를 불러와 격자로 나눈 뒤, 프레임 순서를 자유롭게 바꾸거나 여러 시트의 프레임을 섞어 새 시트로 내보냅니다. 실시간 미리보기를 제공합니다.',
+    icon: '🔀',
+    ready: true,
+    category: 'sprite',
   },
   {
     id: 'grid-slice',
@@ -123,6 +147,7 @@ export const TOOLS: ToolDef[] = [
       '스프라이트 시트를 균일한 격자로 분할하고 ZIP으로 일괄 저장합니다. 행/열 개수 또는 셀 크기 지정, 빈 셀 건너뛰기를 지원합니다.',
     icon: '🧩',
     ready: true,
+    category: 'sprite',
   },
 ]
 
