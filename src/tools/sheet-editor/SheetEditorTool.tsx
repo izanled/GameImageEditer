@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ImageDropzone from '../../components/ImageDropzone'
 import ToolShell from '../../components/ToolShell'
 import DownloadButton from '../../components/DownloadButton'
@@ -31,6 +31,92 @@ interface Frame {
 let nextId = 1
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v))
+
+const allowDrop = (e: React.DragEvent) => e.preventDefault()
+
+// Memoised so reordering/deleting one frame only re-renders the cards whose
+// index (or selection) actually changed, instead of the whole 100+ card grid.
+interface FrameCardProps {
+  id: number
+  url: string
+  index: number
+  selected: boolean
+  onSelect: (index: number) => void
+  onReorder: (from: number, to: number) => void
+  onRemove: (id: number) => void
+  onDragStart: (index: number) => void
+  onDrop: (index: number) => void
+}
+
+const FrameCard = memo(function FrameCard({
+  id,
+  url,
+  index,
+  selected,
+  onSelect,
+  onReorder,
+  onRemove,
+  onDragStart,
+  onDrop,
+}: FrameCardProps) {
+  return (
+    <div
+      draggable
+      onDragStart={() => onDragStart(index)}
+      onDragOver={allowDrop}
+      onDrop={() => onDrop(index)}
+      className={`flex w-20 cursor-move flex-col items-center gap-1 rounded-lg border p-1 ${
+        selected ? 'border-indigo-500 ring-1 ring-indigo-500' : 'border-slate-200 dark:border-slate-700'
+      }`}
+    >
+      <button
+        type="button"
+        onClick={() => onSelect(index)}
+        className="checkerboard flex h-14 w-full cursor-pointer items-center justify-center overflow-hidden rounded"
+        aria-label={`프레임 ${index + 1} 선택`}
+      >
+        <img src={url} alt={`frame ${index + 1}`} className="max-h-14 max-w-full [image-rendering:pixelated]" />
+      </button>
+      <div className="text-[10px] text-slate-400">#{index + 1}</div>
+      <div className="flex gap-0.5">
+        <button type="button" onClick={() => onReorder(index, index - 1)} className="rounded border border-slate-300 px-1 text-xs dark:border-slate-700" aria-label="앞으로">◀</button>
+        <button type="button" onClick={() => onReorder(index, index + 1)} className="rounded border border-slate-300 px-1 text-xs dark:border-slate-700" aria-label="뒤로">▶</button>
+        <button type="button" onClick={() => onRemove(id)} className="rounded border border-slate-300 px-1 text-xs text-red-500 dark:border-slate-700" aria-label="삭제">✕</button>
+      </div>
+    </div>
+  )
+})
+
+interface TrashCardProps {
+  id: number
+  url: string
+  ctrlBtn: string
+  onRestore: (id: number) => void
+  onPurge: (id: number) => void
+}
+
+const TrashCard = memo(function TrashCard({ id, url, ctrlBtn, onRestore, onPurge }: TrashCardProps) {
+  return (
+    <div className="flex w-20 flex-col items-center gap-1 rounded-lg border border-dashed border-slate-300 p-1 opacity-70 dark:border-slate-700">
+      <div className="checkerboard flex h-14 w-full items-center justify-center overflow-hidden rounded">
+        <img src={url} alt="삭제된 프레임" className="max-h-14 max-w-full [image-rendering:pixelated]" />
+      </div>
+      <div className="flex gap-1">
+        <button type="button" onClick={() => onRestore(id)} className={ctrlBtn}>
+          복원
+        </button>
+        <button
+          type="button"
+          onClick={() => onPurge(id)}
+          className="rounded border border-slate-300 px-1 text-xs text-red-500 dark:border-slate-700"
+          aria-label="영구 삭제"
+        >
+          ✕
+        </button>
+      </div>
+    </div>
+  )
+})
 
 export default function SheetEditorTool() {
   // --- staging (a sheet being sliced into frames) ---
@@ -139,14 +225,23 @@ export default function SheetEditorTool() {
     : -1
   const curFrame = curPoolIndex >= 0 ? frames[curPoolIndex] : null
 
+  // latest-value refs so the list callbacks below can stay referentially stable
+  // (memo-friendly) without closing over frames/trash/setIndices.
+  const framesRef = useRef(frames)
+  framesRef.current = frames
+  const trashRef = useRef(trash)
+  trashRef.current = trash
+  const setIndicesRef = useRef(setIndices)
+  setIndicesRef.current = setIndices
+
   function updateFrame(id: number, patch: (f: Frame) => Partial<Frame>) {
     setFrames((prev) => prev.map((f) => (f.id === id ? { ...f, ...patch(f) } : f)))
   }
 
   // select a frame for editing by its pool index (clicking a thumbnail)
-  function selectFrameByPool(i: number) {
+  const selectFrameByPool = useCallback((i: number) => {
     setPlaying(false)
-    const pos = setIndices.indexOf(i)
+    const pos = setIndicesRef.current.indexOf(i)
     if (pos >= 0) {
       setFrameIdx(pos)
     } else {
@@ -154,7 +249,7 @@ export default function SheetEditorTool() {
       pendingPoolRef.current = i
       setAnimSel('all')
     }
-  }
+  }, [])
 
   // staging preview: scaled sheet + grid overlay
   useEffect(() => {
@@ -184,6 +279,13 @@ export default function SheetEditorTool() {
     }
     for (const p of outLayout.placements) {
       const f = frames[p.index]
+      // Untransformed frames always sit inside their (frame-sized) cell, so the
+      // clip is a no-op — skip the save/clip/restore and just draw. Only frames
+      // nudged by dx/dy can overflow into a neighbour and need clipping.
+      if (f.dx === 0 && f.dy === 0) {
+        ctx.drawImage(f.canvas, p.drawX * scale, p.drawY * scale, p.w * scale, p.h * scale)
+        continue
+      }
       const cellX = outMargin + p.col * (outLayout.cellW + outPad)
       const cellY = outMargin + p.row * (outLayout.cellH + outPad)
       ctx.save()
@@ -508,17 +610,18 @@ export default function SheetEditorTool() {
     })
   }
 
-  function removeFrame(id: number) {
-    const idx = frames.findIndex((f) => f.id === id)
+  const removeFrame = useCallback((id: number) => {
+    const cur = framesRef.current
+    const idx = cur.findIndex((f) => f.id === id)
     if (idx < 0) return
     // Push to trash OUTSIDE the setFrames updater — running it inside would
     // double-add under StrictMode's double-invoked updater (see flipFrame).
-    setTrash((t) => [{ frame: frames[idx], index: idx }, ...t])
+    setTrash((t) => [{ frame: cur[idx], index: idx }, ...t])
     setFrames((prev) => prev.filter((f) => f.id !== id))
-  }
+  }, [])
   // re-insert a trashed frame at (close to) its original position
-  function restoreFrame(frameId: number) {
-    const item = trash.find((t) => t.frame.id === frameId)
+  const restoreFrame = useCallback((frameId: number) => {
+    const item = trashRef.current.find((t) => t.frame.id === frameId)
     if (!item) return
     setFrames((prev) => {
       const next = [...prev]
@@ -526,12 +629,12 @@ export default function SheetEditorTool() {
       return next
     })
     setTrash((prev) => prev.filter((t) => t.frame.id !== frameId))
-  }
+  }, [])
   // permanently drop a trashed frame
-  function purgeFrame(frameId: number) {
+  const purgeFrame = useCallback((frameId: number) => {
     setTrash((prev) => prev.filter((t) => t.frame.id !== frameId))
-  }
-  function reorder(from: number, to: number) {
+  }, [])
+  const reorder = useCallback((from: number, to: number) => {
     setFrames((prev) => {
       if (from === to || from < 0 || to < 0 || from >= prev.length || to >= prev.length)
         return prev
@@ -540,7 +643,18 @@ export default function SheetEditorTool() {
       next.splice(to, 0, moved)
       return next
     })
-  }
+  }, [])
+  // stable drag handlers shared by every (memoised) frame card
+  const onCardDragStart = useCallback((i: number) => {
+    dragIndex.current = i
+  }, [])
+  const onCardDrop = useCallback(
+    (i: number) => {
+      if (dragIndex.current !== null) reorder(dragIndex.current, i)
+      dragIndex.current = null
+    },
+    [reorder],
+  )
 
   async function exportSheet() {
     if (frames.length === 0) return
@@ -558,13 +672,15 @@ export default function SheetEditorTool() {
 
   // GIF export: whole sheet (전체) or a single row (행 N). Pool order is preserved.
   const gifOptions = useMemo(() => {
-    const opts = [{ value: 'all', label: `전체 (${frames.length})` }]
+    const n = frames.length
+    const opts = [{ value: 'all', label: `전체 (${n})` }]
+    const rowCounts = new Array(outLayout.rows).fill(0)
+    for (let i = 0; i < n; i++) rowCounts[Math.floor(i / outCols)]++
     for (let r = 0; r < outLayout.rows; r++) {
-      const count = frames.filter((_, i) => Math.floor(i / outCols) === r).length
-      if (count) opts.push({ value: `row:${r}`, label: `행 ${r + 1} (${count})` })
+      if (rowCounts[r]) opts.push({ value: `row:${r}`, label: `행 ${r + 1} (${rowCounts[r]})` })
     }
     return opts
-  }, [frames, outCols, outLayout.rows])
+  }, [frames.length, outCols, outLayout.rows])
 
   function gifFrameIndices(): number[] {
     const all = frames.map((_, i) => i)
@@ -604,17 +720,22 @@ export default function SheetEditorTool() {
 
   // animation set options for the combobox
   const animOptions = useMemo(() => {
-    const opts = [{ value: 'all', label: `전체 (${frames.length})` }]
+    const n = frames.length
+    const opts = [{ value: 'all', label: `전체 (${n})` }]
+    const rowCounts = new Array(outLayout.rows).fill(0)
+    const colCounts = new Array(outCols).fill(0)
+    for (let i = 0; i < n; i++) {
+      rowCounts[Math.floor(i / outCols)]++
+      colCounts[i % outCols]++
+    }
     for (let r = 0; r < outLayout.rows; r++) {
-      const count = frames.filter((_, i) => Math.floor(i / outCols) === r).length
-      if (count) opts.push({ value: `row:${r}`, label: `행 ${r + 1} (${count})` })
+      if (rowCounts[r]) opts.push({ value: `row:${r}`, label: `행 ${r + 1} (${rowCounts[r]})` })
     }
     for (let c = 0; c < outCols; c++) {
-      const count = frames.filter((_, i) => i % outCols === c).length
-      if (count) opts.push({ value: `col:${c}`, label: `열 ${c + 1} (${count})` })
+      if (colCounts[c]) opts.push({ value: `col:${c}`, label: `열 ${c + 1} (${colCounts[c]})` })
     }
     return opts
-  }, [frames, outCols, outLayout.rows])
+  }, [frames.length, outCols, outLayout.rows])
 
   const numInput =
     'mt-1 w-full rounded-md border border-slate-300 bg-transparent px-2 py-1.5 dark:border-slate-700'
@@ -969,36 +1090,18 @@ export default function SheetEditorTool() {
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {frames.map((f, i) => (
-                    <div
+                    <FrameCard
                       key={f.id}
-                      draggable
-                      onDragStart={() => (dragIndex.current = i)}
-                      onDragOver={(e) => e.preventDefault()}
-                      onDrop={() => {
-                        if (dragIndex.current !== null) reorder(dragIndex.current, i)
-                        dragIndex.current = null
-                      }}
-                      className={`flex w-20 cursor-move flex-col items-center gap-1 rounded-lg border p-1 ${
-                        i === curPoolIndex
-                          ? 'border-indigo-500 ring-1 ring-indigo-500'
-                          : 'border-slate-200 dark:border-slate-700'
-                      }`}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => selectFrameByPool(i)}
-                        className="checkerboard flex h-14 w-full cursor-pointer items-center justify-center overflow-hidden rounded"
-                        aria-label={`프레임 ${i + 1} 선택`}
-                      >
-                        <img src={f.url} alt={`frame ${i + 1}`} className="max-h-14 max-w-full [image-rendering:pixelated]" />
-                      </button>
-                      <div className="text-[10px] text-slate-400">#{i + 1}</div>
-                      <div className="flex gap-0.5">
-                        <button type="button" onClick={() => reorder(i, i - 1)} className="rounded border border-slate-300 px-1 text-xs dark:border-slate-700" aria-label="앞으로">◀</button>
-                        <button type="button" onClick={() => reorder(i, i + 1)} className="rounded border border-slate-300 px-1 text-xs dark:border-slate-700" aria-label="뒤로">▶</button>
-                        <button type="button" onClick={() => removeFrame(f.id)} className="rounded border border-slate-300 px-1 text-xs text-red-500 dark:border-slate-700" aria-label="삭제">✕</button>
-                      </div>
-                    </div>
+                      id={f.id}
+                      url={f.url}
+                      index={i}
+                      selected={i === curPoolIndex}
+                      onSelect={selectFrameByPool}
+                      onReorder={reorder}
+                      onRemove={removeFrame}
+                      onDragStart={onCardDragStart}
+                      onDrop={onCardDrop}
+                    />
                   ))}
                 </div>
               </div>
@@ -1008,27 +1111,14 @@ export default function SheetEditorTool() {
                   <div className="mb-2 text-sm text-slate-500">휴지통 (삭제된 프레임 · 복원 가능)</div>
                   <div className="flex flex-wrap gap-2">
                     {trash.map((t) => (
-                      <div
+                      <TrashCard
                         key={t.frame.id}
-                        className="flex w-20 flex-col items-center gap-1 rounded-lg border border-dashed border-slate-300 p-1 opacity-70 dark:border-slate-700"
-                      >
-                        <div className="checkerboard flex h-14 w-full items-center justify-center overflow-hidden rounded">
-                          <img src={t.frame.url} alt="삭제된 프레임" className="max-h-14 max-w-full [image-rendering:pixelated]" />
-                        </div>
-                        <div className="flex gap-1">
-                          <button type="button" onClick={() => restoreFrame(t.frame.id)} className={ctrlBtn}>
-                            복원
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => purgeFrame(t.frame.id)}
-                            className="rounded border border-slate-300 px-1 text-xs text-red-500 dark:border-slate-700"
-                            aria-label="영구 삭제"
-                          >
-                            ✕
-                          </button>
-                        </div>
-                      </div>
+                        id={t.frame.id}
+                        url={t.frame.url}
+                        ctrlBtn={ctrlBtn}
+                        onRestore={restoreFrame}
+                        onPurge={purgeFrame}
+                      />
                     ))}
                   </div>
                 </div>
