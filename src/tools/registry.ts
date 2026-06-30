@@ -139,6 +139,17 @@ export const TOOLS: ToolDef[] = [
     category: 'sprite',
   },
   {
+    id: 'gif-split',
+    path: '/gif-split',
+    title: 'GIF 분할 / 변환',
+    short: 'GIF를 프레임으로 분해해 스프라이트 시트나 개별 PNG로 만듭니다.',
+    description:
+      'GIF 애니메이션의 모든 프레임을 추출해 한 장의 스프라이트 시트(PNG) 또는 개별 PNG(ZIP)로 변환합니다. 프레임 합성·투명도를 그대로 유지하며, 모든 처리는 브라우저에서 업로드 없이 이루어집니다.',
+    icon: '📽️',
+    ready: true,
+    category: 'sprite',
+  },
+  {
     id: 'grid-slice',
     path: '/grid-slice',
     title: '그리드 분할',

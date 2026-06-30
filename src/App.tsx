@@ -9,6 +9,7 @@ import ResizeTool from './tools/resize/ResizeTool'
 import CanvasResizeTool from './tools/canvas-resize/CanvasResizeTool'
 import CropTool from './tools/crop/CropTool'
 import GridSliceTool from './tools/grid-slice/GridSliceTool'
+import GifSplitTool from './tools/gif-split/GifSplitTool'
 import BackgroundRemovalTool from './tools/background-removal/BackgroundRemovalTool'
 import ChromaKeyTool from './tools/chroma-key/ChromaKeyTool'
 import SpriteSheetTool from './tools/sprite-sheet/SpriteSheetTool'
@@ -29,6 +30,7 @@ const COMPONENTS: Record<string, ComponentType> = {
   'color-adjust': ColorAdjustTool,
   palette: PaletteTool,
   'grid-slice': GridSliceTool,
+  'gif-split': GifSplitTool,
 }
 
 export default function App() {
