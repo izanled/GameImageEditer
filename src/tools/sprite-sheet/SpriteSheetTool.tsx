@@ -15,8 +15,11 @@ const MAX_SIDE = 16384
 
 interface Frame {
   id: number
-  img: LoadedImage
+  /** null → a blank (fully transparent) spacer frame */
+  img: LoadedImage | null
   name: string
+  w: number
+  h: number
 }
 
 let nextId = 1
@@ -38,8 +41,20 @@ export default function SpriteSheetTool() {
     setError(null)
     setFrames((prev) => [
       ...prev,
-      ...images.map((n) => ({ id: nextId++, img: n.img, name: n.name })),
+      ...images.map((n) => ({
+        id: nextId++,
+        img: n.img,
+        name: n.name,
+        w: n.img.width,
+        h: n.img.height,
+      })),
     ])
+  }
+  // append a blank, fully-transparent frame sized to the current cell (falls back to 32px)
+  function addEmptyFrame() {
+    const w = Math.max(1, layout.cellW || 32)
+    const h = Math.max(1, layout.cellH || 32)
+    setFrames((prev) => [...prev, { id: nextId++, img: null, name: '(빈 프레임)', w, h }])
   }
   function removeFrame(id: number) {
     setFrames((prev) => prev.filter((f) => f.id !== id))
@@ -64,7 +79,7 @@ export default function SpriteSheetTool() {
   const layout = useMemo(
     () =>
       computeLayout(
-        frames.map((f) => ({ w: f.img.width, h: f.img.height })),
+        frames.map((f) => ({ w: f.w, h: f.h })),
         cols,
         padding,
         margin,
@@ -91,7 +106,7 @@ export default function SpriteSheetTool() {
     }
     for (const p of layout.placements) {
       const f = frames[p.index]
-      ctx.drawImage(f.img.el, p.drawX * scale, p.drawY * scale, p.w * scale, p.h * scale)
+      if (f.img) ctx.drawImage(f.img.el, p.drawX * scale, p.drawY * scale, p.w * scale, p.h * scale)
     }
   }, [frames, layout, transparent, bg])
 
@@ -108,7 +123,8 @@ export default function SpriteSheetTool() {
       ctx.fillRect(0, 0, layout.sheetW, layout.sheetH)
     }
     for (const p of layout.placements) {
-      ctx.drawImage(frames[p.index].img.el, p.drawX, p.drawY, p.w, p.h)
+      const f = frames[p.index]
+      if (f.img) ctx.drawImage(f.img.el, p.drawX, p.drawY, p.w, p.h)
     }
     const blob = await canvasToBlob(canvas, 'image/png')
     downloadBlob(blob, 'spritesheet.png')
@@ -142,8 +158,10 @@ export default function SpriteSheetTool() {
         ctx.fillStyle = bg
         ctx.fillRect(0, 0, cw, ch)
       }
-      const [ox, oy] = anchorOffset(anchor, cw, ch, f.img.width, f.img.height)
-      ctx.drawImage(f.img.el, ox, oy, f.img.width, f.img.height)
+      if (f.img) {
+        const [ox, oy] = anchorOffset(anchor, cw, ch, f.img.width, f.img.height)
+        ctx.drawImage(f.img.el, ox, oy, f.img.width, f.img.height)
+      }
       return canvas
     })
     const blob = encodeGif(cells, { fps: gifFps, transparent })
@@ -239,6 +257,13 @@ export default function SpriteSheetTool() {
               <DownloadButton onClick={download}>PNG 다운로드</DownloadButton>
               <button
                 type="button"
+                onClick={addEmptyFrame}
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
+              >
+                빈 프레임 추가
+              </button>
+              <button
+                type="button"
                 onClick={sortByName}
                 className="rounded-lg border border-slate-300 px-3 py-2 text-sm hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
               >
@@ -300,11 +325,15 @@ export default function SpriteSheetTool() {
                     className="flex w-20 flex-col items-center gap-1 rounded-lg border border-slate-200 p-1 dark:border-slate-700"
                   >
                     <div className="checkerboard flex h-14 w-full items-center justify-center overflow-hidden rounded">
-                      <img
-                        src={f.img.url}
-                        alt={f.name}
-                        className="max-h-14 max-w-full [image-rendering:pixelated]"
-                      />
+                      {f.img ? (
+                        <img
+                          src={f.img.url}
+                          alt={f.name}
+                          className="max-h-14 max-w-full [image-rendering:pixelated]"
+                        />
+                      ) : (
+                        <span className="text-[10px] text-slate-400">빈 프레임</span>
+                      )}
                     </div>
                     <div className="text-[10px] text-slate-400">#{i + 1}</div>
                     <div className="flex gap-0.5">
