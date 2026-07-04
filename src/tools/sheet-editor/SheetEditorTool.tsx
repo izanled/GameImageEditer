@@ -32,6 +32,20 @@ let nextId = 1
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v))
 
+// Rotate a canvas 90° clockwise into a fresh canvas (width/height swap).
+function rotate90(src: HTMLCanvasElement): HTMLCanvasElement {
+  const out = createCanvas(src.height, src.width)
+  const ctx = getContext(out, false)
+  ctx.translate(out.width, 0)
+  ctx.rotate(Math.PI / 2)
+  ctx.drawImage(src, 0, 0)
+  // Reset the transform: getContext('2d') returns this same context object later
+  // (e.g. when erasing/resetting the frame), so a leftover rotation would offset
+  // every subsequent draw onto this canvas.
+  ctx.setTransform(1, 0, 0, 1, 0, 0)
+  return out
+}
+
 const allowDrop = (e: React.DragEvent) => e.preventDefault()
 
 // Memoised so reordering/deleting one frame only re-renders the cards whose
@@ -514,6 +528,49 @@ export default function SheetEditorTool() {
     updateFrame(id, (fr) => ({ url: fr.canvas.toDataURL('image/png') }))
   }
 
+  // Rotate a frame 90° clockwise per click (4 clicks return to the original).
+  // Both the working canvas and the pristine base are rotated so "이 프레임 초기화"
+  // keeps the current orientation, and w/h swap for non-square frames. Fresh
+  // canvases are built once here (not inside the setFrames updater) so StrictMode's
+  // double-invoked updater can't rotate twice.
+  function rotateFrame(id: number) {
+    const f = frames.find((fr) => fr.id === id)
+    if (!f) return
+    const canvas = rotate90(f.canvas)
+    const base = rotate90(f.base)
+    updateFrame(id, () => ({
+      canvas,
+      base,
+      w: canvas.width,
+      h: canvas.height,
+      url: canvas.toDataURL('image/png'),
+    }))
+  }
+
+  // Rotate every frame 90° clockwise in a single action (see rotateFrame).
+  function rotateAllFrames() {
+    if (frames.length === 0) return
+    // Precompute rotated canvases once, keyed by id, so StrictMode's
+    // double-invoked updater can't rotate twice.
+    const rotated = new Map(
+      frames.map((f) => [f.id, { canvas: rotate90(f.canvas), base: rotate90(f.base) }]),
+    )
+    setFrames((prev) =>
+      prev.map((f) => {
+        const r = rotated.get(f.id)
+        if (!r) return f
+        return {
+          ...f,
+          canvas: r.canvas,
+          base: r.base,
+          w: r.canvas.width,
+          h: r.canvas.height,
+          url: r.canvas.toDataURL('image/png'),
+        }
+      }),
+    )
+  }
+
   // restore the pristine slice (undoes erasing) and clears the transform
   function resetFrame(id: number) {
     setFrames((prev) =>
@@ -893,6 +950,13 @@ export default function SheetEditorTool() {
                 <DownloadButton onClick={exportSheet}>PNG 내보내기</DownloadButton>
                 <button
                   type="button"
+                  onClick={rotateAllFrames}
+                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
+                >
+                  ↻ 전체 90° 회전
+                </button>
+                <button
+                  type="button"
                   onClick={addEmptyFrame}
                   className="rounded-lg border border-slate-300 px-3 py-2 text-sm hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
                 >
@@ -1067,6 +1131,9 @@ export default function SheetEditorTool() {
                       </span>
                       <button type="button" onClick={() => flipFrame(curFrame.id)} className={ctrlBtn}>
                         좌우 반전
+                      </button>
+                      <button type="button" onClick={() => rotateFrame(curFrame.id)} className={ctrlBtn}>
+                        ↻ 90° 회전
                       </button>
                       <button type="button" onClick={() => duplicateFrame(curFrame.id)} className={ctrlBtn}>
                         복사
