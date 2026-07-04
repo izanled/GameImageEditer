@@ -10,6 +10,7 @@ import { lockedDimension } from '../../lib/image/resize'
 
 const tool = getTool('resize')!
 const SCALES = [2, 3, 4, 8]
+const PERCENTS = [90, 80, 70, 60, 50, 40, 30, 20, 10]
 
 export default function ResizeTool() {
   const [image, setImage] = useState<LoadedImage | null>(null)
@@ -18,6 +19,7 @@ export default function ResizeTool() {
   const [height, setHeight] = useState(0)
   const [lock, setLock] = useState(true)
   const [smooth, setSmooth] = useState(false) // default: nearest-neighbor for pixel art
+  const [percent, setPercent] = useState(50)
   const [error, setError] = useState<string | null>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
@@ -49,8 +51,8 @@ export default function ResizeTool() {
   }
   function applyScale(mult: number) {
     if (!image) return
-    setWidth(image.width * mult)
-    setHeight(image.height * mult)
+    setWidth(Math.max(1, Math.round(image.width * mult)))
+    setHeight(Math.max(1, Math.round(image.height * mult)))
   }
 
   async function download() {
@@ -122,6 +124,41 @@ export default function ResizeTool() {
                   className="rounded-md border border-slate-300 px-3 py-1 text-sm hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
                 >
                   원본
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <div className="mb-1 text-sm text-slate-500">축소 배율 (원본 기준 %)</div>
+              <div className="flex flex-wrap gap-2">
+                {PERCENTS.map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => applyScale(p / 100)}
+                    className="rounded-md border border-slate-300 px-3 py-1 text-sm hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
+                  >
+                    {p}%
+                  </button>
+                ))}
+              </div>
+              <div className="mt-2 flex items-center gap-2">
+                <input
+                  type="number"
+                  min={1}
+                  max={1000}
+                  value={percent}
+                  onChange={(e) => setPercent(Math.max(1, Number(e.target.value) | 0))}
+                  onKeyDown={(e) => e.key === 'Enter' && applyScale(percent / 100)}
+                  className="w-20 rounded-md border border-slate-300 bg-transparent px-2 py-1.5 text-sm dark:border-slate-700"
+                />
+                <span className="text-sm text-slate-500">%</span>
+                <button
+                  type="button"
+                  onClick={() => applyScale(percent / 100)}
+                  className="rounded-md border border-slate-300 px-3 py-1 text-sm hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
+                >
+                  적용
                 </button>
               </div>
             </div>
