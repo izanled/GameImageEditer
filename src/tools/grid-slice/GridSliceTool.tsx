@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import ImageDropzone from '../../components/ImageDropzone'
 import ToolShell from '../../components/ToolShell'
+import ImageChangeButton from '../../components/ImageChangeButton'
 import { getTool } from '../registry'
 import type { LoadedImage } from '../../lib/image/load'
 import { createCanvas, getContext } from '../../lib/image/draw'
@@ -193,13 +194,9 @@ export default function GridSliceTool() {
               >
                 {busy ? '생성 중…' : 'ZIP 다운로드'}
               </button>
-              <button
-                type="button"
-                onClick={() => setImage(null)}
-                className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
-              >
+              <ImageChangeButton onClick={() => setImage(null)} onImage={onImage} onError={setError}>
                 이미지 변경
-              </button>
+              </ImageChangeButton>
             </div>
           </div>
 

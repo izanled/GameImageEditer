@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import MultiImageDropzone, { type NamedImage } from '../../components/MultiImageDropzone'
 import ToolShell from '../../components/ToolShell'
 import DownloadButton from '../../components/DownloadButton'
+import MultiImageChangeButton from '../../components/MultiImageChangeButton'
 import { getTool } from '../registry'
 import { downloadBlob } from '../../lib/image/export'
 import { downloadZip, type ZipEntry } from '../../lib/zip'
@@ -40,12 +41,8 @@ export default function CompressTool() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  async function onImages(next: NamedImage[]) {
-    setError(null)
-    const merged = [...images, ...next]
-    setImages(merged)
-    // Original byte sizes come from the object URLs backing each image.
-    const sizes = await Promise.all(
+  async function readOriginalSizes(next: NamedImage[]) {
+    return Promise.all(
       next.map((n) =>
         fetch(n.img.url)
           .then((r) => r.blob())
@@ -53,7 +50,22 @@ export default function CompressTool() {
           .catch(() => 0),
       ),
     )
+  }
+
+  async function onImages(next: NamedImage[]) {
+    setError(null)
+    setImages((prev) => [...prev, ...next])
+    const sizes = await readOriginalSizes(next)
     setOrigSizes((prev) => [...prev, ...sizes])
+  }
+
+  async function replaceImages(next: NamedImage[]) {
+    images.forEach((n) => URL.revokeObjectURL(n.img.url))
+    setError(null)
+    setImages(next)
+    setOrigSizes(await readOriginalSizes(next))
+    setResults([])
+    setSelected(0)
   }
 
   function reset() {
@@ -219,13 +231,9 @@ export default function CompressTool() {
               <DownloadButton onClick={download} disabled={busy || results.length === 0}>
                 {shouldZip(images.length) ? 'ZIP 다운로드' : '다운로드'}
               </DownloadButton>
-              <button
-                type="button"
-                onClick={reset}
-                className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
-              >
+              <MultiImageChangeButton onClick={reset} onImages={replaceImages} onError={setError}>
                 이미지 변경
-              </button>
+              </MultiImageChangeButton>
             </div>
             <div>
               <MultiImageDropzone onImages={onImages} onError={setError} compact />

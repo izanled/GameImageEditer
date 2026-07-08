@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import ImageDropzone from '../../components/ImageDropzone'
 import ToolShell from '../../components/ToolShell'
 import DownloadButton from '../../components/DownloadButton'
+import ZoomablePreview from '../../components/ZoomablePreview'
+import ImageChangeButton from '../../components/ImageChangeButton'
 import { getTool } from '../registry'
 import type { LoadedImage } from '../../lib/image/load'
 import { createCanvas, getContext } from '../../lib/image/draw'
@@ -226,13 +228,9 @@ export default function PaletteTool() {
               <DownloadButton onClick={download} disabled={palette.length === 0}>
                 PNG 다운로드
               </DownloadButton>
-              <button
-                type="button"
-                onClick={reset}
-                className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
-              >
+              <ImageChangeButton onClick={reset} onImage={onImage} onError={setError}>
                 이미지 변경
-              </button>
+              </ImageChangeButton>
             </div>
           </div>
 
@@ -246,9 +244,9 @@ export default function PaletteTool() {
               </div>
               <div>
                 <div className="mb-1 text-sm text-slate-500">결과</div>
-                <div className="checkerboard inline-block max-w-full overflow-auto rounded border border-slate-200 dark:border-slate-700">
+                <ZoomablePreview resetKey={image.url}>
                   <canvas ref={resultRef} className="block max-w-full [image-rendering:pixelated]" style={{ maxHeight: '60vh' }} />
-                </div>
+                </ZoomablePreview>
               </div>
             </div>
             {source === 'reference' && !refImage && (

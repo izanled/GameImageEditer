@@ -4,6 +4,8 @@ import type { Config } from '@imgly/background-removal'
 import ImageDropzone from '../../components/ImageDropzone'
 import ToolShell from '../../components/ToolShell'
 import DownloadButton from '../../components/DownloadButton'
+import ZoomablePreview from '../../components/ZoomablePreview'
+import ImageChangeButton from '../../components/ImageChangeButton'
 import { getTool } from '../registry'
 import type { LoadedImage } from '../../lib/image/load'
 import { downloadBlob, replaceExt } from '../../lib/image/export'
@@ -204,13 +206,9 @@ export default function BackgroundRemovalTool() {
             {status === 'done' && (
               <DownloadButton onClick={download}>PNG 다운로드</DownloadButton>
             )}
-            <button
-              type="button"
-              onClick={() => setImage(null)}
-              className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
-            >
+            <ImageChangeButton onClick={() => setImage(null)} onImage={onImage} onError={setError}>
               이미지 변경
-            </button>
+            </ImageChangeButton>
           </div>
 
           {status === 'processing' && (
@@ -231,7 +229,7 @@ export default function BackgroundRemovalTool() {
             </div>
             <div>
               <div className="mb-1 text-sm text-slate-500">결과 (투명 배경)</div>
-              <div className="checkerboard inline-block max-w-full overflow-auto rounded border border-slate-200 dark:border-slate-700">
+              <ZoomablePreview resetKey={resultUrl}>
                 {resultUrl ? (
                   <img
                     src={resultUrl}
@@ -244,7 +242,7 @@ export default function BackgroundRemovalTool() {
                     아직 없음
                   </div>
                 )}
-              </div>
+              </ZoomablePreview>
             </div>
           </div>
         </div>

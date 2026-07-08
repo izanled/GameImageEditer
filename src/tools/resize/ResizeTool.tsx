@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import ImageDropzone from '../../components/ImageDropzone'
 import ToolShell from '../../components/ToolShell'
 import DownloadButton from '../../components/DownloadButton'
+import ImageChangeButton from '../../components/ImageChangeButton'
 import { getTool } from '../registry'
 import type { LoadedImage } from '../../lib/image/load'
 import { getContext } from '../../lib/image/draw'
@@ -165,13 +166,9 @@ export default function ResizeTool() {
 
             <div className="flex flex-wrap gap-2 pt-2">
               <DownloadButton onClick={download}>PNG 다운로드</DownloadButton>
-              <button
-                type="button"
-                onClick={() => setImage(null)}
-                className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
-              >
+              <ImageChangeButton onClick={() => setImage(null)} onImage={onImage} onError={setError}>
                 이미지 변경
-              </button>
+              </ImageChangeButton>
             </div>
           </div>
 
