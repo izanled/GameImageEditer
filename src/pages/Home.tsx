@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import ToolCard from '../components/ToolCard'
-import { TOOLS, CATEGORIES } from '../tools/registry'
+import { TOOLS, CATEGORIES, PRIMARY_TOOLS } from '../tools/registry'
 
 type ViewMode = 'large' | 'small'
 
@@ -22,6 +22,8 @@ export default function Home() {
     localStorage.setItem('home-view', v)
   }
 
+  const primaryTool = PRIMARY_TOOLS[0]
+
   return (
     <div>
       <section className="py-8 text-center">
@@ -33,6 +35,32 @@ export default function Home() {
           업로드 없이.
         </p>
       </section>
+
+      {primaryTool && (
+        <section className="mb-10">
+          <Link
+            to={primaryTool.path}
+            className="group block rounded-lg border border-indigo-200 bg-white p-6 transition hover:border-indigo-400 hover:shadow-sm dark:border-indigo-900/70 dark:bg-slate-950"
+          >
+            <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+              <div className="min-w-0">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-indigo-500">
+                  단독 메뉴
+                </p>
+                <h2 className="text-2xl font-bold text-slate-950 dark:text-slate-50">
+                  {primaryTool.title}
+                </h2>
+                <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600 dark:text-slate-300">
+                  도형, 브러쉬, 지우개, 레이어, 색상, 투명도, 내보내기를 한 화면에서 편집
+                </p>
+              </div>
+              <span className="inline-flex shrink-0 items-center justify-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition group-hover:bg-indigo-500">
+                이미지 편집 시작
+              </span>
+            </div>
+          </Link>
+        </section>
+      )}
 
       <div className="mb-6 flex justify-end">
         <div className="flex rounded-lg border border-slate-200 p-0.5 dark:border-slate-700">

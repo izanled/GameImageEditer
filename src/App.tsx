@@ -4,7 +4,8 @@ import Layout from './components/layout/Layout'
 import Home from './pages/Home'
 import ToolPlaceholder from './pages/ToolPlaceholder'
 import BackgroundRemovalGuide from './pages/BackgroundRemovalGuide'
-import { TOOLS } from './tools/registry'
+import { ALL_TOOLS } from './tools/registry'
+import ImageEditorTool from './tools/image-editor/ImageEditorTool'
 import ResizeTool from './tools/resize/ResizeTool'
 import CanvasResizeTool from './tools/canvas-resize/CanvasResizeTool'
 import CropTool from './tools/crop/CropTool'
@@ -19,6 +20,7 @@ import ColorAdjustTool from './tools/color-adjust/ColorAdjustTool'
 import PaletteTool from './tools/palette/PaletteTool'
 
 const COMPONENTS: Record<string, ComponentType> = {
+  'image-editor': ImageEditorTool,
   'background-removal': BackgroundRemovalTool,
   'chroma-key': ChromaKeyTool,
   resize: ResizeTool,
@@ -39,7 +41,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/guide/background-removal" element={<BackgroundRemovalGuide />} />
-        {TOOLS.map((tool) => {
+        {ALL_TOOLS.map((tool) => {
           const Tool = COMPONENTS[tool.id]
           return (
             <Route

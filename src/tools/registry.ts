@@ -20,6 +20,20 @@ export interface ToolDef {
   category: string
 }
 
+export const PRIMARY_TOOLS: ToolDef[] = [
+  {
+    id: 'image-editor',
+    path: '/image-editor',
+    title: '이미지 에디터',
+    short: '도형, 브러쉬, 지우개, 레이어, 색상, 투명도, 내보내기를 한 화면에서 편집합니다.',
+    description:
+      '벡터 도형과 래스터 브러쉬를 함께 다루는 통합 이미지 편집기입니다. 도형은 다시 선택해 수정할 수 있고, PNG와 JSON 프로젝트 저장을 지원합니다.',
+    icon: 'Edit',
+    ready: true,
+    category: 'primary',
+  },
+]
+
 export const CATEGORIES: ToolCategory[] = [
   { id: 'background', label: '배경 처리', description: '배경 제거 · 크로마키' },
   { id: 'editing', label: '기본 편집', description: '자르기 · 크기 조절 · 압축' },
@@ -162,5 +176,7 @@ export const TOOLS: ToolDef[] = [
   },
 ]
 
+export const ALL_TOOLS: ToolDef[] = [...PRIMARY_TOOLS, ...TOOLS]
+
 export const getTool = (id: string): ToolDef | undefined =>
-  TOOLS.find((tool) => tool.id === id)
+  ALL_TOOLS.find((tool) => tool.id === id)
