@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { sliceByCount, sliceBySize } from './gridSlice'
-import { clampRect } from './crop'
+import { clampRect, fitRect, resizeRectEdge } from './crop'
 
 describe('sliceByCount', () => {
   it('4x4 grid of a 64x64 image yields 16 cells of 16x16', () => {
@@ -57,6 +57,37 @@ describe('clampRect', () => {
       y: 0,
       w: 10,
       h: 10,
+    })
+  })
+})
+
+describe('fitRect', () => {
+  it('keeps requested size by moving the rect back inside the image', () => {
+    expect(fitRect({ x: 90, y: 0, w: 50, h: 10 }, 100, 100)).toEqual({
+      x: 50,
+      y: 0,
+      w: 50,
+      h: 10,
+    })
+  })
+})
+
+describe('resizeRectEdge', () => {
+  it('resizes from the left edge while keeping the right edge fixed', () => {
+    expect(resizeRectEdge({ x: 10, y: 20, w: 30, h: 40 }, 'left', 15, 100, 100)).toEqual({
+      x: 15,
+      y: 20,
+      w: 25,
+      h: 40,
+    })
+  })
+
+  it('resizes from the bottom edge and clamps to image bounds', () => {
+    expect(resizeRectEdge({ x: 10, y: 20, w: 30, h: 40 }, 'bottom', 120, 100, 100)).toEqual({
+      x: 10,
+      y: 20,
+      w: 30,
+      h: 80,
     })
   })
 })

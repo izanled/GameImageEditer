@@ -54,9 +54,9 @@ export const TOOLS: ToolDef[] = [
     id: 'crop',
     path: '/crop',
     title: '이미지 자르기',
-    short: '원하는 영역을 픽셀 단위로 정확하게 잘라냅니다.',
+    short: '크기와 위치를 픽셀 단위로 조정해 원하는 영역을 잘라냅니다.',
     description:
-      '드래그 또는 수치 입력으로 원하는 영역을 픽셀 단위로 정확하게 잘라냅니다.',
+      'W/H로 크기를 정하고 위치 이동과 테두리 조정으로 원하는 영역을 픽셀 단위로 정확하게 잘라냅니다.',
     icon: '✂️',
     ready: true,
     category: 'editing',
