@@ -53,6 +53,7 @@ const allowDrop = (e: React.DragEvent) => e.preventDefault()
 interface FrameCardProps {
   id: number
   url: string
+  scale: number
   index: number
   selected: boolean
   onSelect: (index: number) => void
@@ -65,6 +66,7 @@ interface FrameCardProps {
 const FrameCard = memo(function FrameCard({
   id,
   url,
+  scale,
   index,
   selected,
   onSelect,
@@ -89,7 +91,12 @@ const FrameCard = memo(function FrameCard({
         className="checkerboard flex h-14 w-full cursor-pointer items-center justify-center overflow-hidden rounded"
         aria-label={`프레임 ${index + 1} 선택`}
       >
-        <img src={url} alt={`frame ${index + 1}`} className="max-h-14 max-w-full [image-rendering:pixelated]" />
+        <img
+          src={url}
+          alt={`frame ${index + 1}`}
+          className="max-h-14 max-w-full [image-rendering:pixelated]"
+          style={{ transform: `scale(${scale})` }}
+        />
       </button>
       <div className="text-[10px] text-slate-400">#{index + 1}</div>
       <div className="flex gap-0.5">
@@ -206,8 +213,10 @@ export default function SheetEditorTool() {
     () =>
       computeLayout(
         frames.map((f) => ({
-          w: Math.max(1, Math.round(f.w * f.scale)),
-          h: Math.max(1, Math.round(f.h * f.scale)),
+          // Image scale affects only pixels inside the cell, never the frame
+          // dimensions used to pack the exported sheet.
+          w: f.w,
+          h: f.h,
         })),
         outCols,
         outPad,
@@ -293,25 +302,27 @@ export default function SheetEditorTool() {
     }
     for (const p of outLayout.placements) {
       const f = frames[p.index]
-      // Untransformed frames always sit inside their (frame-sized) cell, so the
-      // clip is a no-op — skip the save/clip/restore and just draw. Only frames
-      // nudged by dx/dy can overflow into a neighbour and need clipping.
-      if (f.dx === 0 && f.dy === 0) {
+      // Untransformed frames already fit their cell. Any scale or nudge can
+      // overflow, so it is clipped to keep every exported frame size fixed.
+      if (f.scale === 1 && f.dx === 0 && f.dy === 0) {
         ctx.drawImage(f.canvas, p.drawX * scale, p.drawY * scale, p.w * scale, p.h * scale)
         continue
       }
       const cellX = outMargin + p.col * (outLayout.cellW + outPad)
       const cellY = outMargin + p.row * (outLayout.cellH + outPad)
+      const fw = Math.max(1, Math.round(f.w * f.scale))
+      const fh = Math.max(1, Math.round(f.h * f.scale))
+      const [bx, by] = anchorOffset(outAnchor, outLayout.cellW, outLayout.cellH, fw, fh)
       ctx.save()
       ctx.beginPath()
       ctx.rect(cellX * scale, cellY * scale, outLayout.cellW * scale, outLayout.cellH * scale)
       ctx.clip()
       ctx.drawImage(
         f.canvas,
-        (p.drawX + f.dx) * scale,
-        (p.drawY + f.dy) * scale,
-        p.w * scale,
-        p.h * scale,
+        (cellX + bx + f.dx) * scale,
+        (cellY + by + f.dy) * scale,
+        fw * scale,
+        fh * scale,
       )
       ctx.restore()
     }
@@ -339,6 +350,7 @@ export default function SheetEditorTool() {
     if (!canvas || !curFrame || outLayout.cellW < 1) return
     const cw = outLayout.cellW
     const ch = outLayout.cellH
+    // A transform changes only the image; the visible frame boundary stays fixed.
     const ds = clamp(Math.min(420 / cw, 420 / ch), 0.5, 16)
     viewRef.current = { ds, cellW: cw, cellH: ch }
     const dw = Math.max(1, Math.round(cw * ds))
@@ -1161,6 +1173,7 @@ export default function SheetEditorTool() {
                       key={f.id}
                       id={f.id}
                       url={f.url}
+                      scale={f.scale}
                       index={i}
                       selected={i === curPoolIndex}
                       onSelect={selectFrameByPool}
