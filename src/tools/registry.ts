@@ -36,7 +36,7 @@ export const PRIMARY_TOOLS: ToolDef[] = [
 
 export const CATEGORIES: ToolCategory[] = [
   { id: 'background', label: '배경 처리', description: '배경 제거 · 크로마키' },
-  { id: 'editing', label: '기본 편집', description: '자르기 · 크기 조절 · 압축' },
+  { id: 'editing', label: '기본 편집', description: '자르기 · 크기 조절 · 픽셀화 · 압축' },
   { id: 'color', label: '색상 도구', description: '색 보정 · 팔레트 교체' },
   { id: 'sprite', label: '스프라이트 / 게임', description: '시트 제작 · 편집 · 분할' },
 ]
@@ -94,6 +94,17 @@ export const TOOLS: ToolDef[] = [
     description:
       '이미지 내용은 그대로 유지하고 캔버스 크기를 조절합니다. 9방향 앵커와 투명/색상 여백 채움을 지원합니다.',
     icon: '🖼️',
+    ready: true,
+    category: 'editing',
+  },
+  {
+    id: 'pixelate',
+    path: '/pixelate',
+    title: '이미지 픽셀화',
+    short: '강도를 조절해 이미지를 픽셀아트처럼 변환합니다.',
+    description:
+      '픽셀 블록 크기를 조절해 이미지를 픽셀아트 스타일로 변환합니다. PNG 투명도(알파)를 유지한 채 결과를 PNG로 저장합니다.',
+    icon: '🟪',
     ready: true,
     category: 'editing',
   },
