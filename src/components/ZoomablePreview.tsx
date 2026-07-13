@@ -10,9 +10,12 @@ import {
 interface Props {
   children: ReactNode
   resetKey?: unknown
+  /** Controlled view state; pass together with `onViewChange` to sync two previews. */
+  view?: ViewState
+  onViewChange?: (view: ViewState) => void
 }
 
-interface ViewState {
+export interface ViewState {
   scale: number
   x: number
   y: number
@@ -20,23 +23,44 @@ interface ViewState {
 
 const MIN_SCALE = 0.25
 const MAX_SCALE = 16
-const DEFAULT_VIEW: ViewState = { scale: 1, x: 0, y: 0 }
+export const DEFAULT_VIEW: ViewState = { scale: 1, x: 0, y: 0 }
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
 }
 
-export default function ZoomablePreview({ children, resetKey }: Props) {
-  const [view, setView] = useState<ViewState>(DEFAULT_VIEW)
+export default function ZoomablePreview({
+  children,
+  resetKey,
+  view: viewProp,
+  onViewChange,
+}: Props) {
+  const [internalView, setInternalView] = useState<ViewState>(DEFAULT_VIEW)
   const [panning, setPanning] = useState(false)
   const viewportRef = useRef<HTMLDivElement>(null)
   const lastPoint = useRef<{ x: number; y: number } | null>(null)
 
+  const controlled = viewProp !== undefined
+  const view = controlled ? viewProp : internalView
+
+  // Refs so stable callbacks (wheel listener) always see the latest values.
+  const viewRef = useRef(view)
+  viewRef.current = view
+  const controlledRef = useRef(controlled)
+  controlledRef.current = controlled
+  const onViewChangeRef = useRef(onViewChange)
+  onViewChangeRef.current = onViewChange
+
+  const updateView = useCallback((updater: (current: ViewState) => ViewState) => {
+    if (controlledRef.current) onViewChangeRef.current?.(updater(viewRef.current))
+    else setInternalView(updater)
+  }, [])
+
   const resetView = useCallback(() => {
-    setView(DEFAULT_VIEW)
+    updateView(() => DEFAULT_VIEW)
     setPanning(false)
     lastPoint.current = null
-  }, [])
+  }, [updateView])
 
   useEffect(() => {
     resetView()
@@ -58,7 +82,7 @@ export default function ZoomablePreview({ children, resetKey }: Props) {
       }
       const factor = Math.exp(-event.deltaY * 0.0015)
 
-      setView((current) => {
+      updateView((current) => {
         const nextScale = clamp(current.scale * factor, MIN_SCALE, MAX_SCALE)
         const ratio = nextScale / current.scale
         return {
@@ -71,7 +95,7 @@ export default function ZoomablePreview({ children, resetKey }: Props) {
 
     target.addEventListener('wheel', handleWheel, { passive: false })
     return () => target.removeEventListener('wheel', handleWheel)
-  }, [])
+  }, [updateView])
 
   function handlePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
     if (event.button !== 2) return
@@ -93,7 +117,7 @@ export default function ZoomablePreview({ children, resetKey }: Props) {
     const dx = event.clientX - lastPoint.current.x
     const dy = event.clientY - lastPoint.current.y
     lastPoint.current = { x: event.clientX, y: event.clientY }
-    setView((current) => ({ ...current, x: current.x + dx, y: current.y + dy }))
+    updateView((current) => ({ ...current, x: current.x + dx, y: current.y + dy }))
   }
 
   function stopPanning(event: ReactPointerEvent<HTMLDivElement>) {
@@ -107,10 +131,10 @@ export default function ZoomablePreview({ children, resetKey }: Props) {
   const hasMoved = view.scale !== 1 || view.x !== 0 || view.y !== 0
 
   return (
-    <div className="inline-block max-w-full align-top">
+    <div className="block w-full align-top">
       <div
         ref={viewportRef}
-        className={`checkerboard max-w-full overflow-hidden rounded border border-slate-200 dark:border-slate-700 ${
+        className={`checkerboard w-full overflow-hidden rounded border border-slate-200 dark:border-slate-700 ${
           panning ? 'cursor-grabbing' : 'cursor-grab'
         }`}
         onContextMenu={(event) => event.preventDefault()}
@@ -120,7 +144,7 @@ export default function ZoomablePreview({ children, resetKey }: Props) {
         onPointerUp={stopPanning}
       >
         <div
-          className="inline-block max-w-full select-none align-top"
+          className="block w-full select-none align-top"
           draggable={false}
           style={{
             transform: `translate3d(${view.x}px, ${view.y}px, 0) scale(${view.scale})`,

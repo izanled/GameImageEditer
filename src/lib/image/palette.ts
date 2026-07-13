@@ -74,43 +74,90 @@ export function extractPalette(data: Uint8ClampedArray, count: number): RGB[] {
   return boxes.map(averageColor)
 }
 
-/** Nearest palette color by squared Euclidean RGB distance. */
-export function nearestColor(c: RGB, palette: RGB[]): RGB {
-  let best = palette[0]
+/** Index of the nearest palette color by squared Euclidean RGB distance. */
+export function nearestIndex(c: RGB, palette: RGB[]): number {
+  let best = 0
   let bestD = Infinity
-  for (const p of palette) {
+  for (let i = 0; i < palette.length; i++) {
+    const p = palette[i]
     const dr = c.r - p.r
     const dg = c.g - p.g
     const db = c.b - p.b
     const d = dr * dr + dg * dg + db * db
     if (d < bestD) {
       bestD = d
-      best = p
+      best = i
     }
   }
   return best
 }
 
-/** Snap every opaque pixel to its nearest palette color, in place. */
-export function remapToPalette(data: Uint8ClampedArray, palette: RGB[]): void {
+/** Nearest palette color by squared Euclidean RGB distance. */
+export function nearestColor(c: RGB, palette: RGB[]): RGB {
+  return palette[nearestIndex(c, palette)]
+}
+
+/** Perceived luminance (Rec. 709) for stable palette ordering. */
+export function luminance(c: RGB): number {
+  return 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b
+}
+
+/** New array sorted dark → light so two palettes pair up by brightness rank. */
+export function sortByLuminance(palette: RGB[]): RGB[] {
+  return [...palette].sort((a, b) => luminance(a) - luminance(b))
+}
+
+/**
+ * Snap every opaque pixel to its nearest palette color, in place.
+ * With `outPalette`, the match happens against `palette` but the written color
+ * comes from `outPalette` at the same index (index-based palette swap).
+ */
+export function remapToPalette(
+  data: Uint8ClampedArray,
+  palette: RGB[],
+  outPalette?: RGB[],
+): void {
   if (palette.length === 0) return
+  const mapped = outPalette && outPalette.length > 0 ? outPalette : null
   for (let i = 0; i < data.length; i += 4) {
     if (data[i + 3] === 0) continue
-    const n = nearestColor({ r: data[i], g: data[i + 1], b: data[i + 2] }, palette)
+    const idx = nearestIndex({ r: data[i], g: data[i + 1], b: data[i + 2] }, palette)
+    const n = mapped ? mapped[idx % mapped.length] : palette[idx]
     data[i] = n.r
     data[i + 1] = n.g
     data[i + 2] = n.b
   }
 }
 
-/** Floyd–Steinberg error-diffusion remap for smoother gradients, in place. */
+/**
+ * Per-pixel index of the nearest palette color; -1 for transparent pixels.
+ * Used to highlight where a palette color is used without rescanning per click.
+ */
+export function buildIndexMap(data: Uint8ClampedArray, palette: RGB[]): Int32Array {
+  const map = new Int32Array(data.length / 4).fill(-1)
+  if (palette.length === 0) return map
+  for (let i = 0, p = 0; i < data.length; i += 4, p++) {
+    if (data[i + 3] === 0) continue
+    map[p] = nearestIndex({ r: data[i], g: data[i + 1], b: data[i + 2] }, palette)
+  }
+  return map
+}
+
+/**
+ * Floyd–Steinberg error-diffusion remap for smoother gradients, in place.
+ * With `outPalette`, quantization error is computed against `palette` but the
+ * final written color is the same-index entry of `outPalette`.
+ */
 export function applyDither(
   data: Uint8ClampedArray,
   w: number,
   h: number,
   palette: RGB[],
+  outPalette?: RGB[],
 ): void {
   if (palette.length === 0) return
+  const mapped = outPalette && outPalette.length > 0 ? outPalette : null
+  const indices = mapped ? new Int32Array(w * h).fill(-1) : null
   const buf = Float32Array.from(data)
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
@@ -119,7 +166,9 @@ export function applyDither(
       const or = buf[i]
       const og = buf[i + 1]
       const ob = buf[i + 2]
-      const n = nearestColor({ r: or, g: og, b: ob }, palette)
+      const ni = nearestIndex({ r: or, g: og, b: ob }, palette)
+      const n = palette[ni]
+      if (indices) indices[y * w + x] = ni
       buf[i] = n.r
       buf[i + 1] = n.g
       buf[i + 2] = n.b
@@ -141,8 +190,15 @@ export function applyDither(
       spread(1, 1, 1 / 16)
     }
   }
-  for (let i = 0; i < data.length; i += 4) {
+  for (let i = 0, p = 0; i < data.length; i += 4, p++) {
     if (data[i + 3] === 0) continue
+    if (mapped && indices && indices[p] >= 0) {
+      const m = mapped[indices[p] % mapped.length]
+      data[i] = m.r
+      data[i + 1] = m.g
+      data[i + 2] = m.b
+      continue
+    }
     data[i] = clamp255(buf[i])
     data[i + 1] = clamp255(buf[i + 1])
     data[i + 2] = clamp255(buf[i + 2])
