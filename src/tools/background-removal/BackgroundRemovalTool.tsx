@@ -215,18 +215,7 @@ export default function BackgroundRemovalTool() {
             <p className="text-sm text-indigo-500">{progress}</p>
           )}
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div>
-              <div className="mb-1 text-sm text-slate-500">원본</div>
-              <div className="checkerboard inline-block max-w-full overflow-auto rounded border border-slate-200 dark:border-slate-700">
-                <img
-                  src={image.url}
-                  alt="원본"
-                  className="block max-w-full"
-                  style={{ maxHeight: '60vh' }}
-                />
-              </div>
-            </div>
+          <div className="space-y-4">
             <div>
               <div className="mb-1 text-sm text-slate-500">결과 (투명 배경)</div>
               <ZoomablePreview resetKey={resultUrl}>
@@ -234,8 +223,8 @@ export default function BackgroundRemovalTool() {
                   <img
                     src={resultUrl}
                     alt="결과"
-                    className="block max-w-full"
-                    style={{ maxHeight: '60vh' }}
+                    className="block w-full"
+                    style={{ height: 'auto' }}
                   />
                 ) : (
                   <div className="flex h-40 w-40 items-center justify-center text-sm text-slate-400">
@@ -243,6 +232,17 @@ export default function BackgroundRemovalTool() {
                   </div>
                 )}
               </ZoomablePreview>
+            </div>
+            <div>
+              <div className="mb-1 text-sm text-slate-500">원본</div>
+              <div className="checkerboard block w-full overflow-hidden rounded border border-slate-200 dark:border-slate-700">
+                <img
+                  src={image.url}
+                  alt="원본"
+                  className="block w-full"
+                  style={{ height: 'auto' }}
+                />
+              </div>
             </div>
           </div>
         </div>
