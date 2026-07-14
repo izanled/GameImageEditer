@@ -37,7 +37,7 @@ export const PRIMARY_TOOLS: ToolDef[] = [
 export const CATEGORIES: ToolCategory[] = [
   { id: 'background', label: '배경 처리', description: '배경 제거 · 크로마키' },
   { id: 'editing', label: '기본 편집', description: '자르기 · 크기 조절 · 픽셀화 · 압축' },
-  { id: 'color', label: '색상 도구', description: '색 보정 · 팔레트 교체' },
+  { id: 'color', label: '색상 도구', description: '색 보정 · 팔레트 교체 · 색상 치환' },
   { id: 'sprite', label: '스프라이트 / 게임', description: '시트 제작 · 편집 · 분할' },
 ]
 
@@ -138,6 +138,17 @@ export const TOOLS: ToolDef[] = [
     description:
       '이미지에서 색 팔레트를 추출하고, 레퍼런스 이미지의 팔레트나 직접 편집한 팔레트로 다시 칠합니다. 각 픽셀을 가장 가까운 팔레트 색으로 매핑해 픽셀아트 느낌의 색감 변환을 만듭니다.',
     icon: '🌈',
+    ready: true,
+    category: 'color',
+  },
+  {
+    id: 'replace-color',
+    path: '/replace-color',
+    title: '색상 치환',
+    short: '선택한 색 계열만 명암을 유지한 채 다른 색으로 바꿉니다.',
+    description:
+      '포토샵의 색상 대체처럼, 이미지를 클릭해 바꿀 색을 고르고 허용치로 범위를 조절한 뒤 색조·채도·명도를 이동합니다. 명암과 부드러운 경계를 유지한 채 색만 바뀌며, 여러 장을 같은 설정으로 한 번에 처리할 수 있습니다.',
+    icon: '💧',
     ready: true,
     category: 'color',
   },

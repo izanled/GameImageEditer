@@ -18,6 +18,7 @@ import SheetEditorTool from './tools/sheet-editor/SheetEditorTool'
 import CompressTool from './tools/compress/CompressTool'
 import ColorAdjustTool from './tools/color-adjust/ColorAdjustTool'
 import PaletteTool from './tools/palette/PaletteTool'
+import ReplaceColorTool from './tools/replace-color/ReplaceColorTool'
 import PixelateTool from './tools/pixelate/PixelateTool'
 
 const COMPONENTS: Record<string, ComponentType> = {
@@ -32,6 +33,7 @@ const COMPONENTS: Record<string, ComponentType> = {
   compress: CompressTool,
   'color-adjust': ColorAdjustTool,
   palette: PaletteTool,
+  'replace-color': ReplaceColorTool,
   pixelate: PixelateTool,
   'grid-slice': GridSliceTool,
   'gif-split': GifSplitTool,
