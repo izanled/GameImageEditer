@@ -4,6 +4,8 @@ import ToolShell from '../../components/ToolShell'
 import DownloadButton from '../../components/DownloadButton'
 import ZoomablePreview from '../../components/ZoomablePreview'
 import ImageChangeButton from '../../components/ImageChangeButton'
+import PreviewControls from '../../components/PreviewControls'
+import { useUndoRedo } from '../../hooks/useUndoRedo'
 import { getTool } from '../registry'
 import type { LoadedImage } from '../../lib/image/load'
 import { createCanvas, getContext } from '../../lib/image/draw'
@@ -51,10 +53,13 @@ export default function ColorAdjustTool() {
   const [image, setImage] = useState<LoadedImage | null>(null)
   const [name, setName] = useState('image.png')
   const [opts, setOpts] = useState<AdjustOptions>(DEFAULT_ADJUSTMENTS)
+  const [swapped, setSwapped] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const srcData = useRef<ImageData | null>(null)
   const resultRef = useRef<HTMLCanvasElement>(null)
+
+  const history = useUndoRedo({ opts }, (v) => setOpts(v.opts))
 
   function onImage(img: LoadedImage, file: File) {
     const canvas = createCanvas(img.width, img.height)
@@ -65,6 +70,7 @@ export default function ColorAdjustTool() {
     setOpts(DEFAULT_ADJUSTMENTS)
     setError(null)
     setImage(img)
+    history.clear()
   }
 
   // Recompute the result whenever any adjustment changes.
@@ -142,14 +148,15 @@ export default function ColorAdjustTool() {
           </div>
 
           <div className="min-w-0 flex-1">
-            <div className="space-y-4">
-              <div>
+            <div className="flex flex-col gap-4">
+              <PreviewControls onSwap={() => setSwapped((s) => !s)} history={history} />
+              <div className={swapped ? 'order-2' : 'order-1'}>
                 <div className="mb-1 text-sm text-slate-500">결과</div>
                 <ZoomablePreview resetKey={image.url}>
                   <canvas ref={resultRef} className="block w-full [image-rendering:pixelated]" style={{ height: 'auto' }} />
                 </ZoomablePreview>
               </div>
-              <div>
+              <div className={swapped ? 'order-1' : 'order-2'}>
                 <div className="mb-1 text-sm text-slate-500">원본</div>
                 <div className="checkerboard block w-full overflow-hidden rounded border border-slate-200 dark:border-slate-700">
                   <img src={image.url} alt="원본" className="block w-full [image-rendering:pixelated]" style={{ height: 'auto' }} />

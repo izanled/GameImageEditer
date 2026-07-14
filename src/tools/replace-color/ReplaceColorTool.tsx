@@ -16,6 +16,8 @@ import {
   previewColor,
 } from '../../lib/image/replaceColor'
 import { downloadZip, type ZipEntry } from '../../lib/zip'
+import PreviewControls from '../../components/PreviewControls'
+import { useUndoRedo } from '../../hooks/useUndoRedo'
 
 const tool = getTool('replace-color')!
 
@@ -35,6 +37,7 @@ export default function ReplaceColorTool() {
   const [saturation, setSaturation] = useState(0)
   const [lightness, setLightness] = useState(0)
   const [showMask, setShowMask] = useState(true)
+  const [swapped, setSwapped] = useState(false)
   const [hover, setHover] = useState<{ color: RGB; x: number; y: number } | null>(null)
   const [view, setView] = useState<ViewState>(DEFAULT_VIEW)
   const [busy, setBusy] = useState(false)
@@ -46,6 +49,17 @@ export default function ReplaceColorTool() {
   const originalImgRef = useRef<HTMLImageElement>(null)
 
   const current = images[selected] ?? null
+
+  const history = useUndoRedo(
+    { samples, fuzziness, hue, saturation, lightness },
+    (v) => {
+      setSamples(v.samples)
+      setFuzziness(v.fuzziness)
+      setHue(v.hue)
+      setSaturation(v.saturation)
+      setLightness(v.lightness)
+    },
+  )
 
   function getSrcData(img: LoadedImage): ImageData {
     let data = srcCache.current.get(img.url)
@@ -67,6 +81,7 @@ export default function ReplaceColorTool() {
     setError(null)
     setImages(next)
     setSelected(0)
+    history.clear()
   }
 
   function reset() {
@@ -79,6 +94,7 @@ export default function ReplaceColorTool() {
     setSaturation(0)
     setLightness(0)
     setError(null)
+    history.clear()
   }
 
   // Eyedropper: left-click on the original picks the pixel color under the
@@ -393,7 +409,7 @@ export default function ReplaceColorTool() {
           </div>
 
           <div className="min-w-0 flex-1">
-            <div className="space-y-4">
+            <div className="flex flex-col gap-4">
               {images.length > 1 && (
                 <div className="flex gap-2 overflow-x-auto pb-1">
                   {images.map((n, i) => (
@@ -419,7 +435,8 @@ export default function ReplaceColorTool() {
               )}
               {current && (
                 <>
-                  <div>
+                  <PreviewControls onSwap={() => setSwapped((s) => !s)} history={history} />
+                  <div className={swapped ? 'order-2' : 'order-1'}>
                     <div className="mb-1 text-sm text-slate-500">
                       결과{images.length > 1 ? ` · ${current.name}` : ''}
                     </div>
@@ -427,7 +444,7 @@ export default function ReplaceColorTool() {
                       <canvas ref={resultRef} className="block w-full [image-rendering:pixelated]" style={{ height: 'auto' }} />
                     </ZoomablePreview>
                   </div>
-                  <div>
+                  <div className={swapped ? 'order-1' : 'order-2'}>
                     <div className="mb-1 text-sm text-slate-500">
                       원본
                       <span className="ml-2 text-xs text-indigo-500">

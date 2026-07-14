@@ -19,6 +19,8 @@ import {
 } from '../../lib/image/palette'
 import { downloadZip, type ZipEntry } from '../../lib/zip'
 import { usePaletteStore, type SavedPalette } from '../../store/paletteStore'
+import PreviewControls from '../../components/PreviewControls'
+import { useUndoRedo } from '../../hooks/useUndoRedo'
 
 const tool = getTool('palette')!
 
@@ -46,6 +48,7 @@ export default function PaletteTool() {
   const [selectedSwatch, setSelectedSwatch] = useState<number | null>(null)
   const [dragIdx, setDragIdx] = useState<number | null>(null)
   const [view, setView] = useState<ViewState>(DEFAULT_VIEW)
+  const [swapped, setSwapped] = useState(false)
   const [dither, setDither] = useState(false)
   const [busy, setBusy] = useState(false)
   const [saveName, setSaveName] = useState('')
@@ -62,6 +65,23 @@ export default function PaletteTool() {
   const overlayRef = useRef<HTMLCanvasElement>(null)
 
   const current = images[selected] ?? null
+
+  // Set while an undo/redo restore is applied so the reference re-extraction
+  // effect doesn't overwrite the restored palettes.
+  const restoreGuard = useRef(false)
+
+  const history = useUndoRedo(
+    { source, refMode, count, manualPalette, refNearest, refPalette },
+    (v) => {
+      restoreGuard.current = true
+      setSource(v.source)
+      setRefMode(v.refMode)
+      setCount(v.count)
+      setManualPalette(v.manualPalette)
+      setRefNearest(v.refNearest)
+      setRefPalette(v.refPalette)
+    },
+  )
 
   function getSrcData(img: LoadedImage): ImageData {
     let data = srcCache.current.get(img.url)
@@ -84,6 +104,7 @@ export default function PaletteTool() {
     setError(null)
     setImages(next)
     setSelected(0)
+    history.clear()
   }
 
   function onRefImage(img: LoadedImage) {
@@ -103,6 +124,7 @@ export default function PaletteTool() {
     setSelectedSwatch(null)
     setSource('self')
     setError(null)
+    history.clear()
   }
 
   // Palette of the selected image (luminance-sorted): drives the self source,
@@ -121,6 +143,7 @@ export default function PaletteTool() {
   // reference image or the color count changes, so drag reordering survives
   // tab/source switches.
   useEffect(() => {
+    if (restoreGuard.current) return
     if (!refImage || !refData.current) {
       setRefNearest([])
       setRefPalette([])
@@ -130,6 +153,12 @@ export default function PaletteTool() {
     setRefNearest(pal)
     setRefPalette(pal.map((c) => ({ ...c })))
   }, [refImage, count])
+
+  // Runs after the effects above, releasing the guard once the restored
+  // render has settled.
+  useEffect(() => {
+    restoreGuard.current = false
+  })
 
   // Selecting a different image or changing the palette invalidates the highlight.
   useEffect(() => {
@@ -590,7 +619,7 @@ export default function PaletteTool() {
           </div>
 
           <div className="min-w-0 flex-1">
-            <div className="space-y-4">
+            <div className="flex flex-col gap-4">
               {images.length > 1 && (
                 <div className="flex gap-2 overflow-x-auto pb-1">
                   {images.map((n, i) => (
@@ -616,7 +645,8 @@ export default function PaletteTool() {
               )}
               {current && (
                 <>
-                  <div>
+                  <PreviewControls onSwap={() => setSwapped((s) => !s)} history={history} />
+                  <div className={swapped ? 'order-2' : 'order-1'}>
                     <div className="mb-1 text-sm text-slate-500">
                       결과{images.length > 1 ? ` · ${current.name}` : ''}
                     </div>
@@ -624,7 +654,7 @@ export default function PaletteTool() {
                       <canvas ref={resultRef} className="block w-full [image-rendering:pixelated]" style={{ height: 'auto' }} />
                     </ZoomablePreview>
                   </div>
-                  <div>
+                  <div className={swapped ? 'order-1' : 'order-2'}>
                     <div className="mb-1 text-sm text-slate-500">
                       원본
                       {selectedSwatch != null && (
