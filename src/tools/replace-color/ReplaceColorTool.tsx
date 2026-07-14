@@ -35,6 +35,7 @@ export default function ReplaceColorTool() {
   const [saturation, setSaturation] = useState(0)
   const [lightness, setLightness] = useState(0)
   const [showMask, setShowMask] = useState(true)
+  const [hover, setHover] = useState<{ color: RGB; x: number; y: number } | null>(null)
   const [view, setView] = useState<ViewState>(DEFAULT_VIEW)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -82,20 +83,60 @@ export default function ReplaceColorTool() {
 
   // Eyedropper: left-click on the original picks the pixel color under the
   // cursor. Works at any zoom because the rect scales with the transform.
-  function sampleAt(e: ReactMouseEvent<HTMLDivElement>) {
+  /** Pixel color of the original under a mouse position, or null. */
+  function colorAtPointer(clientX: number, clientY: number): RGB | null {
     const img = originalImgRef.current
-    if (!img || !current) return
+    if (!img || !current) return null
     const rect = img.getBoundingClientRect()
-    const x = Math.floor(((e.clientX - rect.left) / rect.width) * current.img.width)
-    const y = Math.floor(((e.clientY - rect.top) / rect.height) * current.img.height)
-    if (x < 0 || y < 0 || x >= current.img.width || y >= current.img.height) return
+    if (rect.width === 0 || rect.height === 0) return null
+    const x = Math.floor(((clientX - rect.left) / rect.width) * current.img.width)
+    const y = Math.floor(((clientY - rect.top) / rect.height) * current.img.height)
+    if (x < 0 || y < 0 || x >= current.img.width || y >= current.img.height) return null
     const src = getSrcData(current.img)
     const i = (y * src.width + x) * 4
-    if (src.data[i + 3] === 0) return
-    const c: RGB = { r: src.data[i], g: src.data[i + 1], b: src.data[i + 2] }
+    if (src.data[i + 3] === 0) return null
+    return { r: src.data[i], g: src.data[i + 1], b: src.data[i + 2] }
+  }
+
+  function addSample(c: RGB) {
     setSamples((prev) =>
       prev.some((s) => s.r === c.r && s.g === c.g && s.b === c.b) ? prev : [...prev, c],
     )
+  }
+
+  function sampleAt(e: ReactMouseEvent<HTMLDivElement>) {
+    const c = colorAtPointer(e.clientX, e.clientY)
+    if (c) addSample(c)
+  }
+
+  // Eyedropper-style hover preview: the color under the cursor follows the
+  // mouse in a floating badge. Rendered outside ZoomablePreview because its
+  // transform would break position:fixed.
+  function onHoverMove(e: ReactMouseEvent<HTMLDivElement>) {
+    const c = colorAtPointer(e.clientX, e.clientY)
+    setHover(c ? { color: c, x: e.clientX, y: e.clientY } : null)
+  }
+
+  const eyeDropperSupported = typeof window !== 'undefined' && 'EyeDropper' in window
+
+  // Native EyeDropper (Chromium): magnified, pixel-precise picking anywhere on
+  // screen. The preview renders pixelated, so picked colors are exact.
+  async function pickWithEyeDropper() {
+    interface EyeDropperResult {
+      sRGBHex: string
+    }
+    const Ctor = (
+      window as unknown as {
+        EyeDropper?: new () => { open: () => Promise<EyeDropperResult> }
+      }
+    ).EyeDropper
+    if (!Ctor) return
+    try {
+      const result = await new Ctor().open()
+      addSample(hexToRgb(result.sRGBHex))
+    } catch {
+      // user cancelled the eyedropper
+    }
   }
 
   function removeSample(i: number) {
@@ -195,11 +236,24 @@ export default function ReplaceColorTool() {
         <div className="flex flex-col gap-6 lg:flex-row">
           <div className="shrink-0 space-y-5 lg:w-72">
             <div>
-              <div className="mb-1 text-sm text-slate-500">바꿀 색 ({samples.length})</div>
+              <div className="mb-1 flex items-center gap-2">
+                <span className="text-sm text-slate-500">바꿀 색 ({samples.length})</span>
+                {eyeDropperSupported && (
+                  <button
+                    type="button"
+                    onClick={pickWithEyeDropper}
+                    className="rounded-md border border-slate-300 px-2 py-0.5 text-xs hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
+                    title="화면 확대경으로 픽셀을 정밀하게 선택합니다"
+                  >
+                    💧 스포이드
+                  </button>
+                )}
+              </div>
               {samples.length === 0 ? (
                 <p className="text-xs text-slate-500">
-                  원본 이미지를 클릭하면 그 위치의 색이 선택됩니다. 여러 번 클릭해 비슷한 색을
-                  추가할 수 있습니다.
+                  원본 이미지를 클릭하면 그 위치의 색이 선택됩니다.
+                  {eyeDropperSupported && ' 스포이드 버튼을 누르면 확대경으로 정밀하게 고를 수 있습니다.'}{' '}
+                  여러 번 선택해 비슷한 색을 추가할 수 있습니다.
                 </p>
               ) : (
                 <div className="flex flex-wrap gap-1.5">
@@ -381,7 +435,12 @@ export default function ReplaceColorTool() {
                       </span>
                     </div>
                     <ZoomablePreview resetKey={current.img.url} view={view} onViewChange={setView}>
-                      <div className="relative cursor-crosshair" onClick={sampleAt}>
+                      <div
+                        className="relative cursor-crosshair"
+                        onClick={sampleAt}
+                        onMouseMove={onHoverMove}
+                        onMouseLeave={() => setHover(null)}
+                      >
                         <img
                           ref={originalImgRef}
                           src={current.img.url}
@@ -403,6 +462,18 @@ export default function ReplaceColorTool() {
         </div>
       )}
       {error && <p className="mt-3 text-sm text-red-500">{error}</p>}
+      {hover && (
+        <div
+          className="pointer-events-none fixed z-50 flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2 py-1 text-xs shadow dark:border-slate-600 dark:bg-slate-800"
+          style={{ left: hover.x + 14, top: hover.y + 14 }}
+        >
+          <span
+            className="h-4 w-4 rounded-sm border border-slate-300 dark:border-slate-600"
+            style={{ backgroundColor: rgbToHex(hover.color) }}
+          />
+          <span className="font-mono">{rgbToHex(hover.color)}</span>
+        </div>
+      )}
     </ToolShell>
   )
 }
